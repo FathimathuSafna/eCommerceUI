@@ -1,9 +1,7 @@
 import axios from "axios";
 
 export const baseURL =
-  import.meta.env.API_URL ||
-  'https://api-pysio.safna.online';
-//  "http://localhost:7000";
+  import.meta.env.API_URL ||"http://localhost:5000";
 
 const createAxiosInstance = (baseURL, defaultHeaders = {}) => {
   return axios.create({
@@ -51,5 +49,6 @@ const setupInterceptors = (instance) => {
 export const USER_INSTANCE = createAxiosInstance(`${baseURL}/user/`);
 setupInterceptors(USER_INSTANCE);
 
-export const PATIENT_INSTANCE = createAxiosInstance(`${baseURL}/patients/`);
-setupInterceptors(PATIENT_INSTANCE);
+export const ADMIN_INSTANCE = createAxiosInstance(`${baseURL}/admin/`);
+setupInterceptors(ADMIN_INSTANCE);
+
