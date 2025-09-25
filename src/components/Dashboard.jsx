@@ -464,7 +464,7 @@ const navigate = useNavigate();
             
           ))}
             <div className=" justify-end space-x-2 mt-4">
-                  <button className="flex items-center text-sm font-medium bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                  <button className="flex items-center text-sm font-medium bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors" onClick={() => navigate('/food')}>
                     <span>More</span>
                     <ArrowRight className="w-4 h-4 ml-1" />
                   </button>
