@@ -13,7 +13,8 @@ export const addToCart = async (data) => {
 
 export const getCartItems = async () => {
   try {
-    const response = await CART_INSTANCE.get(`/${id}`);
+    const response = await CART_INSTANCE.get(`/`);
+    console.log("response cart",response.data)
     return response.data;
   } catch (error) {
     console.error("Error fetching cart items:", error);
