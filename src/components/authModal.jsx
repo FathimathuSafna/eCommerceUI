@@ -16,27 +16,27 @@ const modalStyle = {
   p: 4,
 };
 
-const AuthModal = ({ open, handleClose }) => {
+export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [apiError, setApiError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  // --- Validation Schema ---
   const validationSchema = Yup.object({
-    fullName: isLogin
-      ? Yup.string()
-      : Yup.string().required("Full Name is required"),
     email: Yup.string()
       .email("Enter a valid email")
       .required("Email is required"),
     password: Yup.string()
       .min(6, "Password should be at least 6 characters")
       .required("Password is required"),
-    phoneNumber: isLogin
-      ? Yup.string()
-      : Yup.string()
-          .matches(/^[0-9]{10}$/, "Phone number must be 10 digits")
-          .required("Phone number is required"),
+    fullName: Yup.string().when([], {
+      is: () => !isLogin,
+      then: (schema) => schema.required("Full Name is required"),
+    }),
+    phoneNumber: Yup.string().when([], {
+        is: () => !isLogin,
+        then: (schema) => schema
+            .matches(/^[0-9]{10}$/, "Phone number must be 10 digits")
+            .required("Phone number is required"),
+    }),
   });
 
   const formik = useFormik({
@@ -47,25 +47,35 @@ const AuthModal = ({ open, handleClose }) => {
       phoneNumber: "",
     },
     validationSchema,
-    onSubmit: async (values) => {
-      setLoading(true);
+    onSubmit: async (values, { setSubmitting }) => {
       setApiError("");
       try {
+        let response;
+
         if (isLogin) {
-          await login({ email: values.email, password: values.password });
+          response = await login({ email: values.email, password: values.password });
         } else {
-          await signup({
+          response = await signup({
             fullName: values.fullName,
             email: values.email,
             password: values.password,
             phoneNumber: values.phoneNumber,
           });
         }
-        handleClose();
+        
+        // Corrected logic to match your API response
+        if (response && response.data) {
+            localStorage.setItem('token', response.data); // Save the token from response.data
+            onAuthSuccess();
+            handleClose();
+        } else {
+            setApiError("Login failed: Invalid response from server.");
+        }
+
       } catch (error) {
-        setApiError(error.response?.data?.message || "Something went wrong!");
+        setApiError(error.response?.data?.message || "An error occurred.");
       } finally {
-        setLoading(false);
+        setSubmitting(false);
       }
     },
   });
@@ -79,10 +89,7 @@ const AuthModal = ({ open, handleClose }) => {
   return (
     <Modal open={open} onClose={handleClose}>
       <Box sx={modalStyle}>
-        <Typography
-          variant="h6"
-          sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}
-        >
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}>
           {isLogin ? "Login" : "Sign Up"}
         </Typography>
 
@@ -104,9 +111,7 @@ const AuthModal = ({ open, handleClose }) => {
                 value={formik.values.fullName}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
-                error={
-                  formik.touched.fullName && Boolean(formik.errors.fullName)
-                }
+                error={formik.touched.fullName && Boolean(formik.errors.fullName)}
                 helperText={formik.touched.fullName && formik.errors.fullName}
               />
               <TextField
@@ -118,13 +123,8 @@ const AuthModal = ({ open, handleClose }) => {
                 value={formik.values.phoneNumber}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
-                error={
-                  formik.touched.phoneNumber &&
-                  Boolean(formik.errors.phoneNumber)
-                }
-                helperText={
-                  formik.touched.phoneNumber && formik.errors.phoneNumber
-                }
+                error={formik.touched.phoneNumber && Boolean(formik.errors.phoneNumber)}
+                helperText={formik.touched.phoneNumber && formik.errors.phoneNumber}
               />
             </>
           )}
@@ -162,9 +162,9 @@ const AuthModal = ({ open, handleClose }) => {
             fullWidth
             type="submit"
             sx={{ mt: 2 }}
-            disabled={loading}
+            disabled={formik.isSubmitting}
           >
-            {loading ? "Please wait..." : isLogin ? "Login" : "Sign Up"}
+            {formik.isSubmitting ? "Please wait..." : isLogin ? "Login" : "Sign Up"}
           </Button>
         </form>
 
@@ -178,5 +178,3 @@ const AuthModal = ({ open, handleClose }) => {
     </Modal>
   );
 };
-
-export default AuthModal;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2, Plus, Minus, ShoppingBag, Clock, MapPin } from 'lucide-react';
+import {addToCart} from '../services/cartAPI';
 
 const FoodCart = () => {
   const [cartItems, setCartItems] = useState([

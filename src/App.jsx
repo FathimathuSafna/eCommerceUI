@@ -17,17 +17,12 @@ import AdminDashboard from "./pages/admin/adminDashboard";
 import { AdminLogin } from "./pages/admin/adminLogin";
 import "./App.css";
 
-// --- Improved ProtectedRoute Component ---
 const ProtectedRoute = ({ children }) => {
-  // Use a specific token name for the admin
   const token = localStorage.getItem("adminToken");
 
   if (!token) {
-    // If no token exists, redirect the user to the admin login page
     return <Navigate to="/admin/login" replace />;
   }
-
-  // If a token exists, render the child component (the AdminDashboard)
   return children;
 };
 
@@ -35,8 +30,7 @@ const App = () => {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        {/* The <Navigation /> component is not used here. You might want to add a layout for user-facing pages */}
-        <Routes>
++        <Routes>
           {/* User-facing Routes */}
           <Route path="/" element={<Dashboard />} />
           <Route path="/search" element={<CombinedSearchUI />} />

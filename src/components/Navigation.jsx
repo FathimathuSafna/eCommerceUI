@@ -1,36 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Menu, X, Search, ShoppingCart, Package, User } from "lucide-react";
-import { Button, Box, Modal, Typography, TextField, Link } from "@mui/material";
+import { Button, Box, Modal, Typography } from "@mui/material";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
-import { useFormik } from "formik";
 import { useNavigate } from "react-router-dom";
-import * as Yup from "yup";
+import { AuthModal } from "./authModal"; // <-- IMPORTED
 
-// --- Mock API functions for demonstration ---
-const mockLogin = async (credentials) => {
-  console.log("Attempting to log in with:", credentials);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const response = { success: true, token: "fake-jwt-token-for-demo" };
-      localStorage.setItem("token", response.token);
-      resolve(response);
-    }, 1000);
-  });
-};
-
-const mockSignup = async (userData) => {
-  console.log("Attempting to sign up with:", userData);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-       const response = { success: true, token: "fake-jwt-token-for-new-user" };
-       localStorage.setItem("token", response.token);
-       resolve(response);
-    }, 1000);
-  });
-};
-
-// --- Modal Style ---
+// --- Modal Style (used by ProfileModal) ---
 const modalStyle = {
   position: "absolute",
   top: "50%",
@@ -43,163 +19,8 @@ const modalStyle = {
   p: 4,
 };
 
-// --- AuthModal Component ---
-const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
-  const [isLogin, setIsLogin] = useState(true);
-    const navigate = useNavigate();
-
-
-
-  const validationSchema = Yup.object({
-    email: Yup.string()
-      .email("Enter a valid email")
-      .required("Email is required"),
-    password: Yup.string()
-      .min(6, "Password should be of minimum 6 characters length")
-      .required("Password is required"),
-    fullName: Yup.string().when([], {
-      is: () => !isLogin,
-      then: (schema) => schema.required("Full Name is required"),
-    }),
-    number: Yup.string().when([], {
-        is: () => !isLogin,
-        then: (schema) => schema
-            .matches(/^[0-9]{10}$/, "Phone number must be 10 digits")
-            .required("Phone number is required"),
-    }),
-  });
-
-  const formik = useFormik({
-    initialValues: {
-      fullName: "",
-      email: "",
-      number: "", 
-      password: "",
-    },
-    validationSchema: validationSchema,
-    onSubmit: async (values, { setSubmitting }) => {
-      try {
-        let response;
-        if (isLogin) {
-          response = await mockLogin({
-            email: values.email,
-            password: values.password,
-          });
-          console.log("Login successful:", response);
-        } else {
-          response = await mockSignup({
-            fullName: values.fullName,
-            email: values.email,
-            number: values.number,
-            password: values.password,
-          });
-          console.log("Signup successful:", response);
-        }
-        if (response.success) {
-          onAuthSuccess();
-        }
-      } catch (error) {
-        console.error("Authentication failed:", error);
-      } finally {
-        setSubmitting(false);
-      }
-    },
-  });
-
-  const toggleAuthMode = () => {
-    setIsLogin((prev) => !prev);
-    formik.resetForm();
-  };
-
-  return (
-    <Modal open={open} onClose={handleClose}>
-      <Box sx={modalStyle}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold" }}>
-          {isLogin ? "Login" : "Sign Up"}
-        </Typography>
-        <form onSubmit={formik.handleSubmit}>
-          {!isLogin && (
-            <TextField
-              fullWidth
-              id="fullName"
-              name="fullName"
-              label="Full Name"
-              margin="normal"
-              value={formik.values.fullName}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              error={formik.touched.fullName && Boolean(formik.errors.fullName)}
-              helperText={formik.touched.fullName && formik.errors.fullName}
-              disabled={formik.isSubmitting}
-            />
-          )}
-          <TextField
-            fullWidth
-            id="email"
-            name="email"
-            label="Email"
-            margin="normal"
-            value={formik.values.email}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            error={formik.touched.email && Boolean(formik.errors.email)}
-            helperText={formik.touched.email && formik.errors.email}
-            disabled={formik.isSubmitting}
-          />
-          {!isLogin && (
-            <TextField
-              fullWidth
-              id="number"
-              name="number"
-              label="Phone Number"
-              margin="normal"
-              value={formik.values.number}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              error={formik.touched.number && Boolean(formik.errors.number)}
-              helperText={formik.touched.number && formik.errors.number}
-              disabled={formik.isSubmitting}
-            />
-          )}
-          <TextField
-            fullWidth
-            id="password"
-            name="password"
-            label="Password"
-            type="password"
-            margin="normal"
-            value={formik.values.password}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            error={formik.touched.password && Boolean(formik.errors.password)}
-            helperText={formik.touched.password && formik.errors.password}
-            disabled={formik.isSubmitting}
-          />
-          <Button
-            color="primary"
-            variant="contained"
-            fullWidth
-            type="submit"
-            sx={{ mt: 2 }}
-            disabled={formik.isSubmitting}
-          >
-            {formik.isSubmitting ? "Submitting..." : (isLogin ? "Login" : "Sign Up")}
-          </Button>
-        </form>
-        <Typography variant="body2" sx={{ mt: 2, textAlign: "center" }}>
-          {isLogin ? "Don’t have an account? " : "Already have an account? "}
-          <Link component="button" variant="body2" onClick={toggleAuthMode}>
-            {isLogin ? "Sign Up" : "Login"}
-          </Link>
-        </Typography>
-      </Box>
-    </Modal>
-  );
-};
-
 // --- ProfileModal Component ---
 const ProfileModal = ({ open, handleClose, handleLogout }) => {
-  // Mock user data. In a real app, this would come from an API or global state.
   const userDetails = {
     name: "Jane Doe",
     email: "jane.doe@example.com",
@@ -207,7 +28,7 @@ const ProfileModal = ({ open, handleClose, handleLogout }) => {
 
   const onLogoutClick = () => {
     handleLogout();
-    handleClose(); // Also close the modal
+    handleClose();
   };
 
   return (
@@ -237,17 +58,15 @@ const ProfileModal = ({ open, handleClose, handleLogout }) => {
   );
 };
 
-
 // --- Navigation Component ---
-export const Navigation = ({ transparent }) => {
-  
+export const Navigation = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [cartItems, setCartItems] = useState([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // State for the new modal
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const checkToken = () => {
     const token = localStorage.getItem("token");
@@ -270,7 +89,7 @@ export const Navigation = ({ transparent }) => {
   
   const handleAuthSuccess = () => {
     setIsAuthModalOpen(false);
-    checkToken();
+    checkToken(); // Re-check the token to update the UI
   };
 
   return (
@@ -323,7 +142,6 @@ export const Navigation = ({ transparent }) => {
                   Login
                 </Button>
               ) : (
-                // When logged in, show a single user icon to open the profile modal
                 <button
                   onClick={() => setIsProfileModalOpen(true)}
                   className="p-2 text-gray-600 hover:text-red-600"
@@ -369,4 +187,3 @@ export const Navigation = ({ transparent }) => {
     </>
   );
 };
-

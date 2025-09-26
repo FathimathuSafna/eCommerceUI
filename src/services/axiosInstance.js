@@ -52,3 +52,8 @@ setupInterceptors(USER_INSTANCE);
 export const ADMIN_INSTANCE = createAxiosInstance(`${baseURL}/admin/`);
 setupInterceptors(ADMIN_INSTANCE);
 
+export const CART_INSTANCE = createAxiosInstance(`${baseURL}/cart/`);
+setupInterceptors(CART_INSTANCE);
+
+
+
