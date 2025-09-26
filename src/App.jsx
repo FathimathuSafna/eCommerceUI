@@ -6,15 +6,15 @@ import {
   Navigate,
 } from "react-router-dom";
 import { Navigation } from "./components/Navigation";
-import { Dashboard } from "./components/Dashboard";
-import Cart from "./components/Cart";
-import WishList from "./components/wishList";
-import { OrderPage } from "./components/orders";
-import { RestaurantListUI } from "./components/restaurantList";
-import { FoodDisplayUI } from "./components/FoodList";
-import { CombinedSearchUI } from "./components/Search";
-import AdminDashboard from "./components/adminDashboard";
-import { AdminLogin } from "./components/adminLogin";
+import { Dashboard } from "./pages/Dashboard";
+import Cart from "./pages/cart";
+import WishList from "./pages/wishList";
+import { OrderPage } from "./pages/orders";
+import { RestaurantListUI } from "./pages/restaurantList";
+import { FoodDisplayUI } from "./pages/FoodList";
+import { CombinedSearchUI } from "./pages/Search";
+import AdminDashboard from "./pages/admin/adminDashboard";
+import { AdminLogin } from "./pages/admin/adminLogin";
 import "./App.css";
 
 // --- Improved ProtectedRoute Component ---
@@ -45,7 +45,6 @@ const App = () => {
           <Route path="/wishList" element={<WishList />} />
           <Route path="/restaurants" element={<RestaurantListUI />} />
           <Route path="/food" element={<FoodDisplayUI />} />
-
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route

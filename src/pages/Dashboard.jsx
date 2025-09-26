@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Footer from "./footer";
 import { useNavigate } from "react-router-dom";
-import { Navigation } from "./Navigation";
+import { Navigation } from "../components/Navigation";
 
 export const Dashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");

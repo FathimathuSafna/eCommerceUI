@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ShieldCheck, LogIn, User } from "lucide-react"; // Added User icon
 import { useNavigate } from "react-router-dom";
-import { adminLogin } from "../services/adminAPI";
+import { adminLogin } from "../../services/adminAPI";
 
 export const AdminLogin = () => {
   const [userName, setUserName] = useState(""); // Changed from email to userName
