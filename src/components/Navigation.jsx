@@ -4,7 +4,7 @@ import { Button, Box, Modal, Typography } from "@mui/material";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import { useNavigate } from "react-router-dom";
-import { AuthModal } from "./authModal"; // <-- IMPORTED
+import { AuthModal } from "./authModal"; 
 
 // --- Modal Style (used by ProfileModal) ---
 const modalStyle = {

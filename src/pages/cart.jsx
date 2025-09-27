@@ -27,7 +27,6 @@ const FoodCart = () => {
       try {
         setLoading(true);
         const response = await getCartItems();
-        // Ensure the response has a data property which is an array
         if (response && Array.isArray(response.data)) {
           setCartItems(response.data);
         } else {
@@ -173,8 +172,8 @@ const FoodCart = () => {
                               </div>
                               <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex items-center border rounded-lg">
-                                    <button
+                                  {/* <div className="flex items-center border rounded-lg">
+                                    {/* <button
                                       onClick={() =>
                                         updateQuantity(
                                           item._id,
@@ -185,8 +184,8 @@ const FoodCart = () => {
                                       disabled={deletingItems.has(item._id)}
                                     >
                                       <Minus className="w-4 h-4" />
-                                    </button>
-                                    <span className="px-3 py-1 min-w-[40px] text-center">
+                                    </button> */}
+                                    {/* <span className="px-3 py-1 min-w-[40px] text-center">
                                       {item.quantity}
                                     </span>
                                     <button
@@ -200,8 +199,8 @@ const FoodCart = () => {
                                       disabled={deletingItems.has(item._id)}
                                     >
                                       <Plus className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                                    </button> */}
+                                  {/* </div>  */}
                                 </div>
                                 <p className="font-semibold text-gray-800">
                                   ₹

@@ -19,9 +19,10 @@ import {
 import Footer from "./footer";
 import { useNavigate } from "react-router-dom";
 import { Navigation } from "../components/Navigation";
-import { getAllFoodItems } from '../services/adminAPI';
-import { addToCart } from '../services/cartAPI';
-
+import { getAllFoodItems } from "../services/adminAPI";
+import { addToCart } from "../services/cartAPI";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export const Dashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -42,11 +43,35 @@ export const Dashboard = () => {
         setLoading(true);
         const response = await getAllFoodItems();
         // Limit to 6 items for dashboard display
-        const limitedItems = Array.isArray(response.data) ? response.data.slice(0, 6) : [];
+        const limitedItems = Array.isArray(response.data)
+          ? response.data.slice(0, 6)
+          : [];
         setFoodItems(limitedItems);
+
+        // Success toast for data loading
+        if (limitedItems.length > 0) {
+          toast.success(`Loaded ${limitedItems.length} delicious food items!`, {
+            position: "top-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
+        }
       } catch (error) {
         console.error("Failed to fetch food items:", error);
         setFoodItems([]);
+
+        // Error toast for failed loading
+        toast.error("Failed to load food items. Please refresh the page.", {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
       } finally {
         setLoading(false);
       }
@@ -57,7 +82,9 @@ export const Dashboard = () => {
   // Extract unique categories from food items
   const getCategories = () => {
     const categories = ["All"];
-    const uniqueCategories = [...new Set(foodItems.map(item => item.category))].filter(Boolean);
+    const uniqueCategories = [
+      ...new Set(foodItems.map((item) => item.category)),
+    ].filter(Boolean);
     return [...categories, ...uniqueCategories];
   };
 
@@ -65,21 +92,32 @@ export const Dashboard = () => {
 
   // Filter food items based on search and category
   const filteredFoodItems = foodItems.filter((item) => {
-    const matchesSearch = 
+    const matchesSearch =
       item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.restaurantId?.restaurantsName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.restaurantId?.restaurantsName
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
       item.category?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = 
-      selectedCategory === "All" || 
-      item.category === selectedCategory;
-    
+
+    const matchesCategory =
+      selectedCategory === "All" || item.category === selectedCategory;
+
     return matchesSearch && matchesCategory;
   });
 
   const openFoodModal = (foodItem) => {
     setSelectedFood(foodItem);
     setShowModal(true);
+
+    // Info toast when viewing item details
+    toast.info(`Viewing details for ${foodItem.name}`, {
+      position: "bottom-right",
+      autoClose: 2000,
+      hideProgressBar: true,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: true,
+    });
   };
 
   const closeModal = () => {
@@ -87,20 +125,21 @@ export const Dashboard = () => {
     setSelectedFood(null);
   };
 
-  // Add to cart with API integration
   const handleAddToCart = async (foodItem) => {
     try {
-      const cartData = {
-        foodId: foodItem._id,
-        quantity: 1
-      };
-      
+      // Check if item already exists in cart
+      const existingItem = cartItems.find(
+        (cartItem) => cartItem._id === foodItem._id
+      );
+
+      // Send only the food ID
+      const cartData = foodItem._id;
       const response = await addToCart(cartData);
-      
-      if (response && response.success) {
-        // Update local cart state
-        const existingItem = cartItems.find((cartItem) => cartItem._id === foodItem._id);
+      console.log("Cart response:", response);
+
+      if (response && response.msg === "Item added to cart successfully") {
         if (existingItem) {
+          // Increase quantity locally
           setCartItems(
             cartItems.map((cartItem) =>
               cartItem._id === foodItem._id
@@ -108,24 +147,55 @@ export const Dashboard = () => {
                 : cartItem
             )
           );
+
+          toast.success(
+            `${foodItem.name} quantity increased! (${
+              existingItem.quantity + 1
+            })`,
+            {
+              position: "top-right",
+              autoClose: 2000,
+              theme: "colored",
+            }
+          );
         } else {
+          // Add new item
           setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
+
+          toast.success(`${foodItem.name} added to cart! 🎉`, {
+            position: "top-right",
+            autoClose: 2000,
+            theme: "colored",
+          });
         }
-        
-        // Optional: Show success message
-        console.log('Item added to cart successfully');
+      } else {
+        throw new Error(response?.msg || "Failed to add to cart");
       }
     } catch (error) {
-      console.error('Failed to add item to cart:', error);
-      // Optional: Show error message to user
-      alert('Failed to add item to cart. Please try again.');
+      console.error("Failed to add item to cart:", error);
+      toast.error(`Failed to add ${foodItem.name} to cart. Please try again!`, {
+        position: "top-right",
+        autoClose: 4000,
+        theme: "colored",
+      });
     }
   };
 
   const removeFromCart = (itemId) => {
     const existingItem = cartItems.find((cartItem) => cartItem._id === itemId);
+
     if (existingItem && existingItem.quantity === 1) {
       setCartItems(cartItems.filter((cartItem) => cartItem._id !== itemId));
+
+      // Toast for item removal
+      toast.warn(`${existingItem.name} removed from cart`, {
+        position: "top-right",
+        autoClose: 2000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } else {
       setCartItems(
         cartItems.map((cartItem) =>
@@ -134,14 +204,47 @@ export const Dashboard = () => {
             : cartItem
         )
       );
+
+      // Toast for quantity decrease
+      toast.info(`Decreased ${existingItem.name} quantity`, {
+        position: "top-right",
+        autoClose: 1500,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: true,
+      });
     }
   };
 
   const toggleFavorite = (foodId) => {
+    const foodItem = foodItems.find((item) => item._id === foodId);
+
     if (favorites.includes(foodId)) {
       setFavorites(favorites.filter((id) => id !== foodId));
+
+      // Toast for removing from favorites
+      toast.warn(`Removed ${foodItem?.name} from favorites 💔`, {
+        position: "bottom-left",
+        autoClose: 2000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } else {
       setFavorites([...favorites, foodId]);
+
+      // Toast for adding to favorites
+      toast.success(`Added ${foodItem?.name} to favorites! ❤️`, {
+        position: "bottom-left",
+        autoClose: 2000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "dark",
+      });
     }
   };
 
@@ -157,6 +260,41 @@ export const Dashboard = () => {
     0
   );
 
+  // Category change toast
+  const handleCategoryChange = (category) => {
+    setSelectedCategory(category);
+
+    if (category !== "All") {
+      toast.info(`Showing ${category} items`, {
+        position: "top-center",
+        autoClose: 1500,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: true,
+      });
+    }
+  };
+
+  // Cart view toggle
+  const handleCartToggle = () => {
+    setShowCart(!showCart);
+
+    if (!showCart && cartItemCount > 0) {
+      toast.info(
+        `Your cart has ${cartItemCount} item${cartItemCount > 1 ? "s" : ""}`,
+        {
+          position: "top-left",
+          autoClose: 2000,
+          hideProgressBar: true,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        }
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -171,6 +309,28 @@ export const Dashboard = () => {
   return (
     <>
       <Navigation transparent />
+
+      {/* Enhanced ToastContainer with custom styling */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+        toastStyle={{
+          borderRadius: "10px",
+          fontSize: "14px",
+        }}
+        progressStyle={{
+          background: "linear-gradient(90deg, #ef4444, #f97316)",
+        }}
+      />
+
       <div className="min-h-screen bg-gray-50">
         {/* Enhanced Hero Section */}
         <div className="relative bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
@@ -220,7 +380,14 @@ export const Dashboard = () => {
                 <div className="flex flex-col sm:flex-row gap-4 mb-8">
                   <button
                     className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-                    onClick={() => navigate("/food")}
+                    onClick={() => {
+                      navigate("/food");
+                      toast.success("Let's find you something delicious! 🍽️", {
+                        position: "top-center",
+                        autoClose: 2000,
+                        hideProgressBar: true,
+                      });
+                    }}
                   >
                     Order Now
                   </button>
@@ -266,7 +433,7 @@ export const Dashboard = () => {
               {categories.map((category) => (
                 <button
                   key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => handleCategoryChange(category)}
                   className={`px-6 py-3 rounded-full whitespace-nowrap transition-all duration-200 ${
                     selectedCategory === category
                       ? "bg-red-500 text-white shadow-lg transform scale-105"
@@ -298,7 +465,9 @@ export const Dashboard = () => {
                   <ShoppingCart className="w-16 h-16 mx-auto" />
                 </div>
                 <p className="text-gray-500 text-lg">No food items found</p>
-                <p className="text-gray-400">Try adjusting your search or category filter</p>
+                <p className="text-gray-400">
+                  Try adjusting your search or category filter
+                </p>
               </div>
             ) : (
               filteredFoodItems.map((foodItem) => (
@@ -308,7 +477,10 @@ export const Dashboard = () => {
                 >
                   <div className="relative">
                     <img
-                      src={foodItem.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=180&fit=crop'}
+                      src={
+                        foodItem.image ||
+                        "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=180&fit=crop"
+                      }
                       alt={foodItem.name}
                       className="w-full h-36 object-cover cursor-pointer hover:opacity-95 transition-opacity"
                       onClick={() => openFoodModal(foodItem)}
@@ -345,9 +517,9 @@ export const Dashboard = () => {
                     </div>
 
                     <p className="text-gray-600 text-xs mb-2 truncate">
-                      {foodItem.restaurantId?.restaurantsName || 'Restaurant'}
+                      {foodItem.restaurantId?.restaurantsName || "Restaurant"}
                     </p>
-                    
+
                     {foodItem.category && (
                       <span className="text-gray-500 text-xs bg-gray-100 px-2 py-0.5 rounded-full inline-block mb-3">
                         {foodItem.category}
@@ -388,17 +560,23 @@ export const Dashboard = () => {
           </div>
 
           {/* Show More Button */}
-          {foodItems.length >= 6 && (
+          {/* {foodItems.length && (
             <div className="flex justify-center mt-8">
               <button
-                className="flex items-center text-lg font-medium bg-red-500 text-white px-8 py-3 rounded-lg hover:bg-red-600 transition-colors shadow-lg hover:shadow-xl"
-                onClick={() => navigate("/food")}
+                className="flex items-center text-base font-medium bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors shadow-md hover:shadow-lg"
+                onClick={() => {
+                  navigate("/food");
+                  toast.success("Loading all food items for you! 🍕🍔🍜", {
+                    position: "top-center",
+                    autoClose: 2000,
+                  });
+                }}
               >
-                <span>View All Food Items</span>
-                <ArrowRight className="w-5 h-5 ml-2" />
+                <span>View All</span>
+                <ArrowRight className="w-4 h-4 ml-1" />
               </button>
             </div>
-          )}
+          )} */}
         </div>
 
         {/* Food Item Modal */}
@@ -422,7 +600,10 @@ export const Dashboard = () => {
               <div className="p-6">
                 <div className="mb-4">
                   <img
-                    src={selectedFood.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'}
+                    src={
+                      selectedFood.image ||
+                      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"
+                    }
                     alt={selectedFood.name}
                     className="w-full h-48 object-cover rounded-lg"
                   />
@@ -442,7 +623,8 @@ export const Dashboard = () => {
 
                   {selectedFood.restaurantId?.restaurantsName && (
                     <p className="text-gray-600">
-                      <strong>Restaurant:</strong> {selectedFood.restaurantId.restaurantsName}
+                      <strong>Restaurant:</strong>{" "}
+                      {selectedFood.restaurantId.restaurantsName}
                     </p>
                   )}
 
@@ -453,7 +635,9 @@ export const Dashboard = () => {
                   {selectedFood.preparationTime && (
                     <div className="flex items-center space-x-2 text-gray-600">
                       <Clock className="w-4 h-4" />
-                      <span>Ready in {selectedFood.preparationTime} minutes</span>
+                      <span>
+                        Ready in {selectedFood.preparationTime} minutes
+                      </span>
                     </div>
                   )}
 
@@ -501,7 +685,10 @@ export const Dashboard = () => {
                         className="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg"
                       >
                         <img
-                          src={item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=60&h=60&fit=crop'}
+                          src={
+                            item.image ||
+                            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=60&h=60&fit=crop"
+                          }
                           alt={item.name}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
@@ -542,9 +729,18 @@ export const Dashboard = () => {
                       ₹{getTotalPrice()}
                     </span>
                   </div>
-                  <button 
+                  <button
                     className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-semibold transition-colors"
-                    onClick={() => navigate("/cart")}
+                    onClick={() => {
+                      navigate("/cart");
+                      toast.success(
+                        `Proceeding to checkout with ${cartItemCount} items! 🛒`,
+                        {
+                          position: "top-center",
+                          autoClose: 2000,
+                        }
+                      );
+                    }}
                   >
                     Proceed to Checkout
                   </button>
@@ -557,7 +753,7 @@ export const Dashboard = () => {
         {/* Floating Cart Button */}
         {cartItemCount > 0 && (
           <button
-            onClick={() => setShowCart(true)}
+            onClick={handleCartToggle}
             className="fixed bottom-6 right-6 bg-red-500 hover:bg-red-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-40"
           >
             <div className="relative">

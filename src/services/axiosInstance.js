@@ -55,5 +55,9 @@ setupInterceptors(ADMIN_INSTANCE);
 export const CART_INSTANCE = createAxiosInstance(`${baseURL}/cart/`);
 setupInterceptors(CART_INSTANCE);
 
+export const ORDER_INSTANCE = createAxiosInstance(`${baseURL}/order/`);
+setupInterceptors(ORDER_INSTANCE);
+
+
 
 

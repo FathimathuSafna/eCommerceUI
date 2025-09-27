@@ -8,8 +8,10 @@ import {
   addRestaurants, updateRestaurant, deleteRestaurant, getAllRestaurants, 
   addFoodItem, getAllFoodItems, updateFoodItem, deleteFoodItem 
 } from "../../services/adminAPI";
+import {getAllOrders,deleteOrder} from "../../services/orderAPI";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../store/supabaseClient"; // Make sure supabase is configured
+
 
 // --- Main Admin Dashboard Component ---
 const AdminDashboard = () => {

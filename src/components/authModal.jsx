@@ -18,7 +18,7 @@ const modalStyle = {
 
 export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
-  const [apiError, setApiError] = useState("");
+  const [apiMessage, setApiMessage] = useState({ text: "", type: "" });
 
   const validationSchema = Yup.object({
     email: Yup.string()
@@ -32,10 +32,11 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
       then: (schema) => schema.required("Full Name is required"),
     }),
     phoneNumber: Yup.string().when([], {
-        is: () => !isLogin,
-        then: (schema) => schema
-            .matches(/^[0-9]{10}$/, "Phone number must be 10 digits")
-            .required("Phone number is required"),
+      is: () => !isLogin,
+      then: (schema) =>
+        schema
+          .matches(/^[0-9]{10}$/, "Phone number must be 10 digits")
+          .required("Phone number is required"),
     }),
   });
 
@@ -47,55 +48,93 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
       phoneNumber: "",
     },
     validationSchema,
-    onSubmit: async (values, { setSubmitting }) => {
-      setApiError("");
-      try {
-        let response;
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+  setApiMessage({ text: "", type: "" });
 
-        if (isLogin) {
-          response = await login({ email: values.email, password: values.password });
-        } else {
-          response = await signup({
-            fullName: values.fullName,
-            email: values.email,
-            password: values.password,
-            phoneNumber: values.phoneNumber,
-          });
-        }
-        
-        // Corrected logic to match your API response
-        if (response && response.data) {
-            localStorage.setItem('token', response.data); // Save the token from response.data
-            onAuthSuccess();
-            handleClose();
-        } else {
-            setApiError("Login failed: Invalid response from server.");
-        }
+  try {
+    let response;
+if (isLogin) {
+  // --- Login Flow ---
+  response = await login({
+    email: values.email,
+    password: values.password,
+  });
 
-      } catch (error) {
-        setApiError(error.response?.data?.message || "An error occurred.");
-      } finally {
-        setSubmitting(false);
+  // ✅ CORRECTED: Check for 'response.data', which contains the token
+  if (response && response.data) {
+    // ✅ CORRECTED: Save the token from 'response.data'
+    localStorage.setItem("token", response.data);
+    onAuthSuccess();
+    handleClose();
+  } else {
+    setApiMessage({
+      text: response.msg || "Login failed: Invalid credentials.",
+      type: "error",
+    });
+  }
+} else {
+      // --- Signup Flow ---
+      response = await signup({
+        fullName: values.fullName,
+        email: values.email,
+        password: values.password,
+        phoneNumber: values.phoneNumber,
+      });
+
+       if (response && response.msg) {
+        setApiMessage({
+          text: response.msg + " Please login.",
+          type: "success",
+        });
+        resetForm();
+        setIsLogin(true);
+      } else {
+        setApiMessage({
+          text: "Signup failed: Invalid response from server.",
+          type: "error",
+        });
       }
-    },
+    
+      
+      // The second, problematic if/else block that was here has been removed.
+    }
+  } catch (error) {
+    setApiMessage({
+      text: error.response?.msg|| "An error occurred.",
+      type: "error",
+    });
+  } finally {
+    setSubmitting(false);
+  }
+},
   });
 
   const toggleAuthMode = () => {
     setIsLogin((prev) => !prev);
     formik.resetForm();
-    setApiError("");
+    setApiMessage({ text: "", type: "" });
   };
 
   return (
     <Modal open={open} onClose={handleClose}>
       <Box sx={modalStyle}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}>
+        <Typography
+          variant="h6"
+          sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}
+        >
           {isLogin ? "Login" : "Sign Up"}
         </Typography>
 
-        {apiError && (
-          <Typography color="error" sx={{ mb: 1, textAlign: "center" }}>
-            {apiError}
+        {apiMessage.text && (
+          <Typography
+            sx={{
+              mb: 1,
+              textAlign: "center",
+              color:
+                apiMessage.type === "error" ? "error.main" : "success.main",
+            }}
+          >
+            {apiMessage.text}
           </Typography>
         )}
 
@@ -111,7 +150,9 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
                 value={formik.values.fullName}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
-                error={formik.touched.fullName && Boolean(formik.errors.fullName)}
+                error={
+                  formik.touched.fullName && Boolean(formik.errors.fullName)
+                }
                 helperText={formik.touched.fullName && formik.errors.fullName}
               />
               <TextField
@@ -123,8 +164,13 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
                 value={formik.values.phoneNumber}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
-                error={formik.touched.phoneNumber && Boolean(formik.errors.phoneNumber)}
-                helperText={formik.touched.phoneNumber && formik.errors.phoneNumber}
+                error={
+                  formik.touched.phoneNumber &&
+                  Boolean(formik.errors.phoneNumber)
+                }
+                helperText={
+                  formik.touched.phoneNumber && formik.errors.phoneNumber
+                }
               />
             </>
           )}
@@ -164,7 +210,11 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
             sx={{ mt: 2 }}
             disabled={formik.isSubmitting}
           >
-            {formik.isSubmitting ? "Please wait..." : isLogin ? "Login" : "Sign Up"}
+            {formik.isSubmitting
+              ? "Please wait..."
+              : isLogin
+              ? "Login"
+              : "Sign Up"}
           </Button>
         </form>
 
