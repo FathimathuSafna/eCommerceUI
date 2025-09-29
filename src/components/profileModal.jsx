@@ -1,13 +1,15 @@
-import React from "react";
+import React, { useState, useEffect } from 'react';
+import { getMyProfile } from '../services/userApi'; 
 import {
   Box,
   Modal,
   Typography,
   Button,
   Divider,
+  CircularProgress
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
 
+// Style for the modal box
 const modalStyle = {
   position: "absolute",
   top: "50%",
@@ -18,50 +20,72 @@ const modalStyle = {
   borderRadius: 3,
   boxShadow: 24,
   p: 4,
+  textAlign: "center",
 };
 
-const ProfileModal = ({ open, handleClose, user, setIsLoggedIn }) => {
-  const navigate = useNavigate();
+// The component now accepts the necessary props to function as a modal
+const ProfileModal = ({ open, handleClose, handleLogout }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    setIsLoggedIn(false);
-    handleClose();
-    navigate("/"); // redirect to home
-  };
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return; 
+
+      try {
+        setLoading(true);
+        const response = await getMyProfile();
+        setUser(response.data);
+      } catch (err) {
+        console.error("Failed to fetch profile.", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Only fetch data when the modal is told to open
+    if (open) {
+        fetchUserProfile();
+    }
+  }, [open]); // This effect now correctly depends on the 'open' prop
+
+  const onLogoutClick = () => {
+    handleLogout();
+    handleClose(); // Also close the modal
+  }
 
   return (
+    // The content is now wrapped in the MUI Modal component
     <Modal open={open} onClose={handleClose}>
       <Box sx={modalStyle}>
-        <Typography
-          variant="h6"
-          sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}
-        >
-          Profile
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+          My Profile
         </Typography>
 
-        {/* User Details */}
-        <Typography variant="body1" sx={{ mb: 1 }}>
-          <strong>Name:</strong> {user?.fullName || "Guest"}
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 1 }}>
-          <strong>Email:</strong> {user?.email || "Not available"}
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 2 }}>
-          <strong>Phone:</strong> {user?.phoneNumber || "Not available"}
-        </Typography>
+        {loading ? (
+          <CircularProgress />
+        ) : (
+          <>
+            <Typography variant="body1" sx={{ mb: 1, textAlign: 'left' }}>
+              <strong>Name:</strong> {user?.fullName || '...'}
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 2, textAlign: 'left' }}>
+              <strong>Email:</strong> {user?.email || '...'}
+            </Typography>
 
-        <Divider sx={{ mb: 2 }} />
+            <Divider sx={{ my: 2 }} />
 
-        {/* Logout Button */}
-        <Button
-          variant="contained"
-          color="error"
-          fullWidth
-          onClick={handleLogout}
-        >
-          Logout
-        </Button>
+            <Button
+              variant="contained"
+              color="error"
+              fullWidth
+              onClick={onLogoutClick}
+            >
+              Logout
+            </Button>
+          </>
+        )}
       </Box>
     </Modal>
   );

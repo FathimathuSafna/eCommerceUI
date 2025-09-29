@@ -32,3 +32,13 @@ export const removeFromCart = async (id) => {
     throw error;
   }
 };
+
+export const updateCartItem = async (id, data) => {
+  try {
+    const response = await CART_INSTANCE.put(`/update/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating cart item:", error);
+    throw error;
+  }
+};

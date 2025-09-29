@@ -21,6 +21,7 @@ import { useNavigate } from "react-router-dom";
 import { Navigation } from "../components/Navigation";
 import { getAllFoodItems } from "../services/adminAPI";
 import { addToCart } from "../services/cartAPI";
+import { likeFood, removeLike, fetchLikes } from "../services/likeAPI";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -49,16 +50,16 @@ export const Dashboard = () => {
         setFoodItems(limitedItems);
 
         // Success toast for data loading
-        if (limitedItems.length > 0) {
-          toast.success(`Loaded ${limitedItems.length} delicious food items!`, {
-            position: "top-right",
-            autoClose: 3000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-          });
-        }
+        // if (limitedItems.length > 0) {
+        //   toast.success(`Loaded ${limitedItems.length} delicious food items!`, {
+        //     position: "top-right",
+        //     autoClose: 3000,
+        //     hideProgressBar: false,
+        //     closeOnClick: true,
+        //     pauseOnHover: true,
+        //     draggable: true,
+        //   });
+        // }
       } catch (error) {
         console.error("Failed to fetch food items:", error);
         setFoodItems([]);
@@ -217,34 +218,45 @@ export const Dashboard = () => {
     }
   };
 
-  const toggleFavorite = (foodId) => {
+  const toggleFavorite = async (foodId) => {
     const foodItem = foodItems.find((item) => item._id === foodId);
+    const isCurrentlyFavorite = favorites.includes(foodId);
 
-    if (favorites.includes(foodId)) {
-      setFavorites(favorites.filter((id) => id !== foodId));
-
-      // Toast for removing from favorites
-      toast.warn(`Removed ${foodItem?.name} from favorites 💔`, {
-        position: "bottom-left",
-        autoClose: 2000,
-        hideProgressBar: true,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
+    // 1. Optimistically update the UI for a fast response
+    if (isCurrentlyFavorite) {
+      setFavorites((prevFavorites) =>
+        prevFavorites.filter((id) => id !== foodId)
+      );
     } else {
-      setFavorites([...favorites, foodId]);
+      setFavorites((prevFavorites) => [...prevFavorites, foodId]);
+    }
 
-      // Toast for adding to favorites
-      toast.success(`Added ${foodItem?.name} to favorites! ❤️`, {
-        position: "bottom-left",
-        autoClose: 2000,
-        hideProgressBar: true,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "dark",
-      });
+    try {
+      if (isCurrentlyFavorite) {
+        await removeLike(foodItem._id);
+        toast.warn(`Removed ${foodItem?.name} from favorites 💔`, {
+          position: "bottom-left",
+        });
+      } else {
+        // If it WAS NOT a favorite, call the API to ADD the like
+        await likeFood({ foodId });
+        toast.success(`Added ${foodItem?.name} to favorites! ❤️`, {
+          position: "bottom-left",
+          theme: "dark",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to update favorite status:", error);
+      toast.error("Could not update favorites. Please try again.");
+
+      // 3. If the API call fails, revert the UI to the previous state
+      if (isCurrentlyFavorite) {
+        setFavorites((prevFavorites) => [...prevFavorites, foodId]); // Add it back
+      } else {
+        setFavorites((prevFavorites) =>
+          prevFavorites.filter((id) => id !== foodId)
+        ); // Remove it again
+      }
     }
   };
 
@@ -308,8 +320,7 @@ export const Dashboard = () => {
 
   return (
     <>
-      <Navigation transparent />
-
+      <Navigation />
       {/* Enhanced ToastContainer with custom styling */}
       <ToastContainer
         position="top-right"
@@ -381,7 +392,7 @@ export const Dashboard = () => {
                   <button
                     className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
                     onClick={() => {
-                      navigate("/food");
+                      navigate("/restaurants");
                       toast.success("Let's find you something delicious! 🍽️", {
                         position: "top-center",
                         autoClose: 2000,
@@ -400,12 +411,15 @@ export const Dashboard = () => {
                   <div
                     className="d-flex align-items-center justify-content-center text-center text-white"
                     style={{
-                      minHeight: "60vh",
+                      minHeight: "5vh",
                       backgroundSize: "cover",
                       backgroundPosition: "center",
                       position: "relative",
                     }}
-                  ></div>
+                  >
+                    {" "}
+                    <img src="/burgers.png" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -447,14 +461,10 @@ export const Dashboard = () => {
           )}
 
           {/* Filters */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-gray-800">
-              {filteredFoodItems.length} food items available
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-700">
+              {filteredFoodItems.length} items available
             </h2>
-            <button className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-              <Filter className="w-4 h-4" />
-              <span>Filters</span>
-            </button>
           </div>
 
           {/* Food Items Grid */}
@@ -560,7 +570,7 @@ export const Dashboard = () => {
           </div>
 
           {/* Show More Button */}
-          {/* {foodItems.length && (
+          {foodItems.length && (
             <div className="flex justify-center mt-8">
               <button
                 className="flex items-center text-base font-medium bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors shadow-md hover:shadow-lg"
@@ -576,7 +586,7 @@ export const Dashboard = () => {
                 <ArrowRight className="w-4 h-4 ml-1" />
               </button>
             </div>
-          )} */}
+          )}
         </div>
 
         {/* Food Item Modal */}

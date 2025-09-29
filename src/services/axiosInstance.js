@@ -58,6 +58,9 @@ setupInterceptors(CART_INSTANCE);
 export const ORDER_INSTANCE = createAxiosInstance(`${baseURL}/order/`);
 setupInterceptors(ORDER_INSTANCE);
 
+export const LIKE_INSTANCE = createAxiosInstance(`${baseURL}/likes/`)
+setupInterceptors(LIKE_INSTANCE)
+
 
 
 

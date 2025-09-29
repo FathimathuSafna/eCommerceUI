@@ -86,9 +86,7 @@ export const AdminLogin = () => {
               >
                   Password
               </label>
-              <a href="#" className="text-sm text-red-600 hover:underline">
-                  Forgot password?
-              </a>
+              
             </div>
             <input
               id="password"

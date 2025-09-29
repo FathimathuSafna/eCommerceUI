@@ -1,62 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Menu, X, Search, ShoppingCart, Package, User } from "lucide-react";
-import { Button, Box, Modal, Typography } from "@mui/material";
+import { Button } from "@mui/material";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import { useNavigate } from "react-router-dom";
 import { AuthModal } from "./authModal"; 
-
-// --- Modal Style (used by ProfileModal) ---
-const modalStyle = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-  width: 350,
-  bgcolor: "background.paper",
-  borderRadius: 3,
-  boxShadow: 24,
-  p: 4,
-};
-
-// --- ProfileModal Component ---
-const ProfileModal = ({ open, handleClose, handleLogout }) => {
-  const userDetails = {
-    name: "Jane Doe",
-    email: "jane.doe@example.com",
-  };
-
-  const onLogoutClick = () => {
-    handleLogout();
-    handleClose();
-  };
-
-  return (
-    <Modal open={open} onClose={handleClose}>
-      <Box sx={modalStyle}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold" }}>
-          My Profile
-        </Typography>
-        <Box>
-          <Typography variant="body1" sx={{ mb: 1 }}>
-            <strong>Name:</strong> {userDetails.name}
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 3 }}>
-            <strong>Email:</strong> {userDetails.email}
-          </Typography>
-          <Button
-            color="error"
-            variant="contained"
-            fullWidth
-            onClick={onLogoutClick}
-          >
-            Logout
-          </Button>
-        </Box>
-      </Box>
-    </Modal>
-  );
-};
+import ProfileModal from "./profileModal"; 
 
 // --- Navigation Component ---
 export const Navigation = () => {
@@ -83,23 +32,26 @@ export const Navigation = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("userId"); 
     checkToken();
     navigate("/");
   };
   
   const handleAuthSuccess = () => {
     setIsAuthModalOpen(false);
-    checkToken(); // Re-check the token to update the UI
+    checkToken();
   };
 
   return (
     <>
-      <navbar className="bg-white shadow-sm sticky top-0 z-50">
+      <nav className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="text-2xl font-bold text-red-600">FreshCart</div>
+            <div className="text-2xl font-bold text-red-600 cursor-pointer" onClick={() => navigate("/")}>
+              FreshCart
+            </div>
 
-            <div className="flex-1 max-w-lg mx-8 hidden md:block">
+            {/* <div className="flex-1 max-w-lg mx-8 hidden md:block">
               <div className="relative">
                 <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <input
@@ -110,48 +62,26 @@ export const Navigation = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-            </div>
+            </div> */}
 
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate("/")}
-                className="p-2 text-gray-600 hover:text-red-600"
-              >
+              <button onClick={() => navigate("/")} className="p-2 text-gray-600 hover:text-red-600">
                 <HomeOutlinedIcon className="w-6 h-6" />
               </button>
-
-              <button
-                onClick={() => navigate("/orders")}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-              >
+              <button onClick={() => navigate("/orders")} className="p-2 text-gray-600 hover:text-gray-900">
                 <Package className="w-6 h-6" />
               </button>
-
-              <button
-                onClick={() => navigate("/wishList")}
-                className="p-2 text-gray-600 hover:text-red-600"
-              >
+              <button onClick={() => navigate("/wishList")} className="p-2 text-gray-600 hover:text-red-600">
                 <FavoriteBorderIcon className="w-6 h-6" />
               </button>
-
-              {!isLoggedIn ? (
-                <Button
-                  onClick={() => setIsAuthModalOpen(true)}
-                  sx={{ textTransform: "none", color: "inherit" }}
-                >
-                  Login
-                </Button>
-              ) : (
-                <button
-                  onClick={() => setIsProfileModalOpen(true)}
-                  className="p-2 text-gray-600 hover:text-red-600"
-                >
-                  <User className="w-6 h-6" />
-                </button>
-              )}
-
               <button
-                onClick={() => navigate("/cart")}
+                onClick={() => {
+                  if (!isLoggedIn) {
+                    setIsAuthModalOpen(true);
+                  } else {
+                    navigate("/cart");
+                  }
+                }}
                 className="relative p-2 text-gray-600 hover:text-red-600"
               >
                 <ShoppingCart className="w-6 h-6" />
@@ -162,16 +92,23 @@ export const Navigation = () => {
                 )}
               </button>
 
-              <button
-                className="md:hidden p-2"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              >
+              {!isLoggedIn ? (
+                <Button onClick={() => setIsAuthModalOpen(true)} sx={{ textTransform: "none", color: "inherit" }}>
+                  Login
+                </Button>
+              ) : (
+                <button onClick={() => setIsProfileModalOpen(true)} className="p-2 text-gray-600 hover:text-red-600">
+                  <User className="w-6 h-6" />
+                </button>
+              )}
+
+              <button className="md:hidden p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
                 {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
             </div>
           </div>
         </div>
-      </navbar>
+      </nav>
       
       <AuthModal 
         open={isAuthModalOpen} 
@@ -179,6 +116,7 @@ export const Navigation = () => {
         onAuthSuccess={handleAuthSuccess}
       />
 
+      {/* ✅ Use the imported ProfileModal component */}
       <ProfileModal
         open={isProfileModalOpen}
         handleClose={() => setIsProfileModalOpen(false)}

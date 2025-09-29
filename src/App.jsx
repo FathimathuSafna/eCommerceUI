@@ -5,7 +5,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { Navigation } from "./components/Navigation";
+
 import { Dashboard } from "./pages/Dashboard";
 import Cart from "./pages/cart";
 import WishList from "./pages/wishList";
@@ -15,14 +15,23 @@ import { FoodDisplayUI } from "./pages/FoodList";
 import { CombinedSearchUI } from "./pages/Search";
 import AdminDashboard from "./pages/admin/adminDashboard";
 import { AdminLogin } from "./pages/admin/adminLogin";
+
 import "./App.css";
 
-const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem("adminToken");
+const ProtectedRoute = ({ children, role }) => {
+  const userToken = localStorage.getItem("token");
+  const adminToken = localStorage.getItem("adminToken");
 
-  if (!token) {
-    return <Navigate to="/admin/login" replace />;
+  if (role === "admin") {
+    if (!adminToken) {
+      return <Navigate to="/admin/login" replace />;
+    }
+  } else {
+    if (!userToken) {
+      return <Navigate to="/" replace />;
+    }
   }
+
   return children;
 };
 
@@ -30,21 +39,66 @@ const App = () => {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-+        <Routes>
-          {/* User-facing Routes */}
+        <Routes>
+          {/* Public Route */}
           <Route path="/" element={<Dashboard />} />
-          <Route path="/search" element={<CombinedSearchUI />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/orders" element={<OrderPage />} />
-          <Route path="/wishList" element={<WishList />} />
-          <Route path="/restaurants" element={<RestaurantListUI />} />
-          <Route path="/food" element={<FoodDisplayUI />} />
+
+          {/* User Protected Routes */}
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute role="user">
+                <CombinedSearchUI />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cart"
+            element={
+              <ProtectedRoute role="user">
+                <Cart />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute role="user">
+                <OrderPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wishList"
+            element={
+              <ProtectedRoute role="user">
+                <WishList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/restaurants"
+            element={
+              <ProtectedRoute role="user">
+                <RestaurantListUI />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/food"
+            element={
+              <ProtectedRoute role="user">
+                <FoodDisplayUI />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute role="admin">
                 <AdminDashboard />
               </ProtectedRoute>
             }
