@@ -96,35 +96,57 @@ const AdminDashboard = () => {
     };
     fetchProducts();
   }, [productDataVersion]);
+  // In your AdminDashboard component...
 
   // Effect for fetching Orders
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         const response = await getAllOrders();
-        const formattedData = response.data.map((order) => {
-          const totalPrice =
-            order.cartIds?.reduce(
-              (sum, item) => sum + item.price * item.quantity,
-              0
-            ) || 0;
+        const formattedOrders = response.data.map((order) => {
+          // This part correctly extracts the items
+          const items =
+            order.items?.map((item) => ({
+              name: item.foodId?.name || "N/A",
+              price: item.foodId?.price || 0,
+              quantity: item.quantity,
+              restaurantName:
+                item.foodId?.restaurantId?.restaurantsName || "N/A",
+            })) || [];
 
-          const restaurantName =
-            order.cartIds?.[0]?.foodId?.restaurantId?.restaurantsName || "N/A";
+          // ✅ NEW: Create a display string from the items array
+          const foodItemDisplay = items
+            .map((item) => `${item.name} (x${item.quantity})`)
+            .join(", ");
+
+          const restaurantNames = [
+            ...new Set(items.map((i) => i.restaurantName)),
+          ].join(", ");
+
+          const totalAmount = items.reduce(
+            (sum, i) => sum + i.price * i.quantity,
+            0
+          );
+
+          // Return the formatted object with the new string property
           return {
-            ...order,
             id: order._id,
-            customerName: order.userId?.email || "Guest",
-            restaurantName,
-            amount: `₹${totalPrice.toFixed(2)}`,
+            customerName:
+              order.userId?.fullName || order.userId?.email || "Guest",
+            items: items, // Keep original items array for modals/editing
+            foodItemDisplay: foodItemDisplay, // ✅ Use this new property for the table
+            restaurantName: restaurantNames,
+            amount: `₹${totalAmount.toFixed(2)}`,
             status: order.status || "Delivered",
           };
         });
-        setOrdersData(formattedData);
+
+        setOrdersData(formattedOrders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
       }
     };
+
     fetchOrders();
   }, [orderDataVersion]);
 
@@ -305,13 +327,22 @@ const AdminDashboard = () => {
             onDelete={(item) => handleDelete(item, "product")}
           />
         );
+      // In your renderContent function...
+
       case "orders":
         return (
           <TableView
             title="Orders"
             data={ordersData}
-            columns={["Order ID", "Customer", "Amount", "Status"]}
-            dataKeys={["id", "customerName", "amount", "status"]}
+            columns={["Order ID", "Customer", "Food Item", "Amount", "Status"]}
+            // ✅ CHANGE "items" to "foodItemDisplay" here
+            dataKeys={[
+              "id",
+              "customerName",
+              "foodItemDisplay",
+              "amount",
+              "status",
+            ]}
             statusKey="status"
             getStatusBadge={getStatusBadge}
             onEdit={(item) => handleEdit(item, "order")}

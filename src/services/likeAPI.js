@@ -13,11 +13,15 @@ export const likeFood = async (data) => {
 };
 
 
+// likesApi.js
 export const fetchLikes = async (foodId) => {
   try {
-    // If foodId exists, add it as a query parameter
-    const response = await LIKE_INSTANCE.get(`/?foodId=${foodId || ""}`);
-    return response.data;
+    let url = "/";
+    if (foodId) {
+      url += `?foodId=${foodId}`;
+    }
+    const response = await LIKE_INSTANCE.get(url);
+    return response.data.data; // backend sends { msg, data }
   } catch (error) {
     console.error("Error during fetching likes", error);
     throw error;

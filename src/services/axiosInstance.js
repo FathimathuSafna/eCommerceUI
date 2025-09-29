@@ -38,7 +38,7 @@ const setupInterceptors = (instance) => {
         console.log("Unauthorized, logging out...");
 
         localStorage.clear();
-        window.location.href = "/login";
+        // window.location.href = "/";
         // redirect to login page
       }
       return Promise.reject(error);

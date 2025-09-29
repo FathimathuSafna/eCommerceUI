@@ -25,6 +25,7 @@ export const getUserOrders = async () => {
 export const getAllOrders = async () => {
   try {
     const response = await ORDER_INSTANCE.get(`/getAll`);
+    console.log("response of order",response.data)
     return response.data;
     }
     catch (error) {
