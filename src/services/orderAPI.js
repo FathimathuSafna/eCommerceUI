@@ -1,5 +1,7 @@
 import {ORDER_INSTANCE} from "./axiosInstance";
 
+// 
+
 export const placeOrder = async (data) => {
   try {
     const response = await ORDER_INSTANCE.post("/", data);
@@ -9,6 +11,17 @@ export const placeOrder = async (data) => {
     throw error;
   }
 };
+
+export const getOrder = async () =>{
+  try{
+    const response = await ORDER_INSTANCE.get("/payment")
+    return response.data
+  } catch (error){
+    console.error("Error placing order:", error);
+    throw error;
+  }
+}
+
 
 export const getUserOrders = async () => {
   try {

@@ -37,18 +37,21 @@ export const Dashboard = () => {
   const [likedItems, setLikedItems] = useState([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const loadLikes = async () => {
-      try {
-        const likes = await fetchLikes(); // no foodId = get all
-        const likedFoodIds = likes.map((like) => like.foodId._id);
-        setLikedItems(likedFoodIds);
-      } catch (err) {
-        console.error("Failed to load likes", err);
-      }
-    };
-    loadLikes();
-  }, []);
+   useEffect(() => {
+  const loadLikes = async () => {
+    try {
+      const likes = await fetchLikes(); // fetch all likes
+      const likedFoodIds = likes
+        .filter((like) => like.foodId) // skip null foodIds
+        .map((like) => like.foodId._id);
+      setLikedItems(likedFoodIds);
+    } catch (err) {
+      console.error("Failed to load likes", err);
+    }
+  };
+  loadLikes();
+}, []);
+
 
   useEffect(() => {
     const fetchFoodData = async () => {

@@ -11,7 +11,7 @@ import Cart from "./pages/cart";
 import WishList from "./pages/wishList";
 import { OrderPage } from "./pages/orders";
 import { RestaurantListUI } from "./pages/restaurantList";
-import { FoodDisplayUI } from "./pages/FoodList";
+import { FoodDisplayUI} from "./pages/FoodList";
 import { CombinedSearchUI } from "./pages/Search";
 import AdminDashboard from "./pages/admin/adminDashboard";
 import { AdminLogin } from "./pages/admin/adminLogin";

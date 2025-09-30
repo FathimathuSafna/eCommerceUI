@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { Trash2, ShoppingBag, Loader2, Plus, Minus } from "lucide-react";
 import {
-  Trash2,
-  ShoppingBag,
-  Loader2,
-  Plus,
-  Minus,
-} from "lucide-react";
-import { getCartItems, removeFromCart, updateCartItem } from "../services/cartAPI";
+  getCartItems,
+  removeFromCart,
+  updateCartItem,
+} from "../services/cartAPI";
 import { placeOrder } from "../services/orderAPI";
 import { Navigation } from "../components/Navigation";
 
@@ -21,7 +19,9 @@ const FoodCart = () => {
     try {
       setLoading(true);
       const response = await getCartItems();
-      setCartItems(response?.data && Array.isArray(response.data) ? response.data : []);
+      setCartItems(
+        response?.data && Array.isArray(response.data) ? response.data : []
+      );
     } catch (error) {
       console.error("Failed to fetch cart items:", error);
       setCartItems([]);
@@ -50,7 +50,7 @@ const FoodCart = () => {
       console.error("Failed to update quantity:", error);
       alert("Failed to update quantity. Please try again.");
       // If the API call fails, revert the change by re-fetching data
-      fetchCartData(); 
+      fetchCartData();
     } finally {
       setUpdatingItems((prev) => {
         const newSet = new Set(prev);
@@ -60,20 +60,55 @@ const FoodCart = () => {
     }
   };
 
-  const handlePlaceOrder = async () => {
-    try {
-      if (cartItems.length === 0) return;
-      setPlacingOrder(true);
-      await placeOrder({});
-      alert("✅ Order placed successfully!");
-      await fetchCartData(); // Refresh cart, which should now be empty
-    } catch (error) {
-      console.error("Failed to place order:", error);
-      alert("❌ Failed to place order. Please try again.");
-    } finally {
-      setPlacingOrder(false);
+const handlePlaceOrder = async (amount) => {
+  try {
+    setPlacingOrder(true);
+
+    // 1️⃣ Create order via backend
+    const { order, razorpayOrder } = await placeOrder({ amount }); 
+    console.log("Order details:", order); // full order items, quantity, price, etc.
+
+    if (!razorpayOrder || !razorpayOrder.id) {
+      alert("Failed to create order");
+      return;
     }
-  };
+
+    // 2️⃣ Load Razorpay SDK
+    const res = await new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+    if (!res) return alert("Razorpay SDK failed to load");
+
+    // 3️⃣ Open Razorpay checkout
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      name: "Your Store",
+      description: "Order Payment",
+      order_id: razorpayOrder.id,
+      handler: (response) => {
+        console.log("Payment success:", response);
+        console.log("Order info:", order); // you can use full order details here
+        alert("Payment successful!");
+      },
+      theme: { color: "#f97316" },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  } catch (error) {
+    console.error("Error placing order:", error);
+    alert("Could not create order");
+  } finally {
+    setPlacingOrder(false);
+  }
+};
+
 
   const deleteCart = async (itemId) => {
     try {
@@ -129,52 +164,94 @@ const FoodCart = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {cartItems.map((item) =>
-                    item.foodId && (
-                      <div key={item._id} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex gap-4">
-                          <img
-                            src={item.foodId.image || "https://placehold.co/120x120?text=Food"}
-                            alt={item.foodId.name}
-                            className="w-20 h-20 rounded-lg object-cover"
-                          />
-                          <div className="flex-1">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h3 className="font-semibold text-gray-800">{item.foodId.name}</h3>
-                                <p className="text-sm text-gray-500">
-                                  {item.foodId.restaurant?.restaurantsName || "A great restaurant"}
+                  {cartItems.map(
+                    (item) =>
+                      item.foodId && (
+                        <div
+                          key={item._id}
+                          className="border border-gray-200 rounded-lg p-4"
+                        >
+                          <div className="flex gap-4">
+                            <img
+                              src={
+                                item.foodId.image ||
+                                "https://placehold.co/120x120?text=Food"
+                              }
+                              alt={item.foodId.name}
+                              className="w-20 h-20 rounded-lg object-cover"
+                            />
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <h3 className="font-semibold text-gray-800">
+                                    {item.foodId.name}
+                                  </h3>
+                                  <p className="text-sm text-gray-500">
+                                    {item.foodId.restaurant?.restaurantsName ||
+                                      "A great restaurant"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3 border border-gray-200 rounded-full px-2 py-1">
+                                  <button
+                                    onClick={() =>
+                                      item.quantity > 1
+                                        ? handleQuantityChange(
+                                            item._id,
+                                            item.quantity - 1
+                                          )
+                                        : deleteCart(item._id)
+                                    }
+                                    disabled={
+                                      updatingItems.has(item._id) ||
+                                      deletingItems.has(item._id)
+                                    }
+                                    className="text-gray-500 hover:text-red-500 disabled:opacity-50"
+                                  >
+                                    {item.quantity > 1 ? (
+                                      <Minus className="w-4 h-4" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4 text-red-500" />
+                                    )}
+                                  </button>
+
+                                  {updatingItems.has(item._id) ||
+                                  deletingItems.has(item._id) ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <span className="w-5 text-center font-semibold">
+                                      {item.quantity}
+                                    </span>
+                                  )}
+
+                                  <button
+                                    onClick={() =>
+                                      handleQuantityChange(
+                                        item._id,
+                                        item.quantity + 1
+                                      )
+                                    }
+                                    disabled={
+                                      updatingItems.has(item._id) ||
+                                      deletingItems.has(item._id)
+                                    }
+                                    className="text-gray-500 hover:text-orange-500 disabled:opacity-50"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                <p className="font-semibold text-lg text-gray-800">
+                                  ₹
+                                  {(item.foodId.price * item.quantity).toFixed(
+                                    2
+                                  )}
                                 </p>
                               </div>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-3 border border-gray-200 rounded-full px-2 py-1">
-                                <button
-                                  onClick={() => item.quantity > 1 ? handleQuantityChange(item._id, item.quantity - 1) : deleteCart(item._id)}
-                                  disabled={updatingItems.has(item._id) || deletingItems.has(item._id)}
-                                  className="text-gray-500 hover:text-red-500 disabled:opacity-50"
-                                >
-                                  {item.quantity > 1 ? <Minus className="w-4 h-4" /> : <Trash2 className="w-4 h-4 text-red-500" />}
-                                </button>
-
-                                {updatingItems.has(item._id) || deletingItems.has(item._id) ? <Loader2 className="w-5 h-5 animate-spin" /> : <span className="w-5 text-center font-semibold">{item.quantity}</span>}
-
-                                <button
-                                  onClick={() => handleQuantityChange(item._id, item.quantity + 1)}
-                                  disabled={updatingItems.has(item._id) || deletingItems.has(item._id)}
-                                  className="text-gray-500 hover:text-orange-500 disabled:opacity-50"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                              </div>
-                              <p className="font-semibold text-lg text-gray-800">
-                                ₹{(item.foodId.price * item.quantity).toFixed(2)}
-                              </p>
-                            </div>
                           </div>
                         </div>
-                      </div>
-                    )
+                      )
                   )}
                 </div>
               )}
@@ -186,22 +263,40 @@ const FoodCart = () => {
             <div className="bg-white rounded-xl shadow-sm p-6 sticky top-24">
               <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
               <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-sm"><span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm"><span>Delivery fee</span><span>₹{deliveryFee.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm"><span>Tax</span><span>₹{tax.toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>₹{subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Delivery fee</span>
+                  <span>₹{deliveryFee.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Tax</span>
+                  <span>₹{tax.toFixed(2)}</span>
+                </div>
                 <div className="border-t pt-3 mt-3">
                   <div className="flex justify-between font-semibold text-lg">
-                    <span>Total</span><span className="text-orange-600">₹{total.toFixed(2)}</span>
+                    <span>Total</span>
+                    <span className="text-orange-600">₹{total.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
               <button
-                onClick={handlePlaceOrder}
+                onClick={() => handlePlaceOrder(total)}
                 disabled={cartItems.length === 0 || loading || placingOrder}
                 className="w-full bg-orange-500 text-white py-3 rounded-lg font-semibold hover:bg-orange-600 disabled:bg-gray-300"
               >
-                {placingOrder ? (<div className="flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin mr-2" />Placing Order...</div>) 
-                : (cartItems.length === 0 ? "Cart is Empty" : "Proceed to Checkout")}
+                {placingOrder ? (
+                  <div className="flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    Placing Order...
+                  </div>
+                ) : cartItems.length === 0 ? (
+                  "Cart is Empty"
+                ) : (
+                  "Proceed to Checkout"
+                )}
               </button>
             </div>
           </div>
