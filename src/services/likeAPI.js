@@ -14,13 +14,14 @@ export const likeFood = async (data) => {
 
 
 // likesApi.js
-export const fetchLikes = async (foodId) => {
+export const fetchLikes = async () => {
   try {
-    let url = "/";
-    if (foodId) {
-      url += `?foodId=${foodId}`;
-    }
-    const response = await LIKE_INSTANCE.get(url);
+    // let url = "/";
+    // if (foodId) {
+    //   url += `?foodId=${foodId}`;
+    // }
+    const response = await LIKE_INSTANCE.get('/');
+    console.log("response",response)
     return response.data.data; // backend sends { msg, data }
   } catch (error) {
     console.error("Error during fetching likes", error);

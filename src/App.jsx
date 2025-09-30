@@ -79,17 +79,13 @@ const App = () => {
           <Route
             path="/restaurants"
             element={
-              <ProtectedRoute role="user">
                 <RestaurantListUI />
-              </ProtectedRoute>
             }
           />
           <Route
             path="/food"
             element={
-              <ProtectedRoute role="user">
                 <FoodDisplayUI />
-              </ProtectedRoute>
             }
           />
 

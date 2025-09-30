@@ -60,55 +60,58 @@ const FoodCart = () => {
     }
   };
 
-const handlePlaceOrder = async (amount) => {
-  try {
-    setPlacingOrder(true);
+  const handlePlaceOrder = async (amount) => {
+    try {
+      setPlacingOrder(true);
 
-    // 1️⃣ Create order via backend
-    const { order, razorpayOrder } = await placeOrder({ amount }); 
-    console.log("Order details:", order); // full order items, quantity, price, etc.
+      // ✅ Collect only cart IDs
+      const cartIds = cartItems.map((item) => item._id);
 
-    if (!razorpayOrder || !razorpayOrder.id) {
-      alert("Failed to create order");
-      return;
+      // Send cartIds + amount
+      const { order, razorpayOrder } = await placeOrder({ cartIds, amount });
+
+      if (!razorpayOrder?.id) {
+        alert("Failed to create order");
+        return;
+      }
+
+      // Load Razorpay SDK
+      const res = await new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+      });
+      if (!res) return alert("Razorpay SDK failed to load");
+
+      // Open Razorpay checkout
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: "Your Store",
+        description: "Order Payment",
+        order_id: razorpayOrder.id,
+        handler: (response) => {
+          console.log("Payment success:", response);
+          console.log("Order info:", order);
+          alert("Payment successful!");
+        },
+        theme: { color: "#f97316" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+
+      await fetchCartData();
+    } catch (error) {
+      console.error("Error placing order:", error);
+      alert("Could not create order");
+    } finally {
+      setPlacingOrder(false);
     }
-
-    // 2️⃣ Load Razorpay SDK
-    const res = await new Promise((resolve) => {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-    if (!res) return alert("Razorpay SDK failed to load");
-
-    // 3️⃣ Open Razorpay checkout
-    const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency,
-      name: "Your Store",
-      description: "Order Payment",
-      order_id: razorpayOrder.id,
-      handler: (response) => {
-        console.log("Payment success:", response);
-        console.log("Order info:", order); // you can use full order details here
-        alert("Payment successful!");
-      },
-      theme: { color: "#f97316" },
-    };
-
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-  } catch (error) {
-    console.error("Error placing order:", error);
-    alert("Could not create order");
-  } finally {
-    setPlacingOrder(false);
-  }
-};
-
+  };
 
   const deleteCart = async (itemId) => {
     try {

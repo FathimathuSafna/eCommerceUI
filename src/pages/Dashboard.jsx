@@ -176,10 +176,7 @@ export const Dashboard = () => {
           )
         );
 
-        toast.success(
-          `${foodItem.name} quantity increased! (${existingItem.quantity + 1})`,
-          { position: "top-right", autoClose: 2000, theme: "colored" }
-        );
+       
       } else {
         // Add new item
         setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);

@@ -104,17 +104,19 @@ const AdminDashboard = () => {
       try {
         const response = await getAllOrders();
         const formattedOrders = response.data.map((order) => {
-          // This part correctly extracts the items
+          
+          // --- FIX IS HERE ---
+          // Changed order.items to order.cartIds to match your backend API response
           const items =
-            order.items?.map((item) => ({
-              name: item.foodId?.name || "N/A",
-              price: item.foodId?.price || 0,
-              quantity: item.quantity,
+            order.cartIds?.map((cartItem) => ({
+              name: cartItem.foodId?.name || "N/A",
+              price: cartItem.foodId?.price || 0,
+              quantity: cartItem.quantity,
               restaurantName:
-                item.foodId?.restaurantId?.restaurantsName || "N/A",
+                cartItem.foodId?.restaurantId?.restaurantsName || "N/A",
             })) || [];
 
-          // ✅ NEW: Create a display string from the items array
+          // This part now correctly calculates the name, restaurant, and amount
           const foodItemDisplay = items
             .map((item) => `${item.name} (x${item.quantity})`)
             .join(", ");
@@ -128,13 +130,12 @@ const AdminDashboard = () => {
             0
           );
 
-          // Return the formatted object with the new string property
           return {
             id: order._id,
             customerName:
               order.userId?.fullName || order.userId?.email || "Guest",
-            items: items, // Keep original items array for modals/editing
-            foodItemDisplay: foodItemDisplay, // ✅ Use this new property for the table
+            items: items, 
+            foodItemDisplay: foodItemDisplay, // For the table view
             restaurantName: restaurantNames,
             amount: `₹${totalAmount.toFixed(2)}`,
             status: order.status || "Delivered",

@@ -11,17 +11,17 @@ import { getUserOrders } from "../services/orderAPI";
 import { Navigation } from "../components/Navigation";
 import { useNavigate } from "react-router-dom";
 
-
 export const OrderPage = () => {
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Function to calculate total price
-  const calculateTotal = (items = []) => {
-    return items.reduce(
-      (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
+  // ✅ Calculate total using cartIds
+  const calculateTotal = (cartItems = []) => {
+    return cartItems.reduce(
+      (sum, item) =>
+        sum + (item.foodId?.price || 0) * (item.quantity || 0),
       0
     );
   };
@@ -75,6 +75,7 @@ export const OrderPage = () => {
     return texts[status] || status;
   };
 
+  // ✅ Updated to use cartIds instead of items
   const renderOrderList = (orderList) => {
     if (!orderList.length) {
       return (
@@ -87,8 +88,8 @@ export const OrderPage = () => {
     }
 
     return orderList.map((order) => {
-      const restaurant = order.items?.[0]?.foodId?.restaurantId;
-      const total = calculateTotal(order.items);
+      const restaurant = order.cartIds?.[0]?.foodId?.restaurantId;
+      const total = calculateTotal(order.cartIds);
 
       return (
         <div
@@ -104,7 +105,7 @@ export const OrderPage = () => {
             <div className="flex items-center space-x-4">
               <img
                 src={
-                  restaurant?.image ||
+                  order.cartIds?.[0]?.foodId?.image ||
                   "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=100&h=100&fit=crop"
                 }
                 alt={restaurant?.restaurantsName || "Restaurant"}
@@ -138,10 +139,10 @@ export const OrderPage = () => {
           </div>
           <div className="border-t pt-4">
             <p className="text-sm text-gray-600 mb-1">
-              {order.items?.length || 0} items
+              {order.cartIds?.length || 0} items
             </p>
             <p className="text-sm text-gray-900 truncate">
-              {order.items
+              {order.cartIds
                 ?.map(
                   (item) => `${item.quantity}x ${item.foodId?.name || "Item"}`
                 )
@@ -157,19 +158,6 @@ export const OrderPage = () => {
     <>
       <Navigation />
       <div className="min-h-screen bg-gray-50">
-        {/* <header className="bg-white shadow-sm border-b sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center space-x-3">
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" onClick={() => navigate("/")}>
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-                <h1 className="text-lg font-semibold text-gray-800">My Orders</h1>
-              </div>
-            </div>
-          </div>
-        </header> */}
-
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <button
             className="flex items-center gap-2 px-3 py-1 sm:px-4 sm:py-2 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors text-gray-800 font-medium mb-4"
@@ -212,10 +200,10 @@ export const OrderPage = () => {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-900 mb-2">
-                          Items ({selectedOrder.items?.length || 0})
+                          Items ({selectedOrder.cartIds?.length || 0})
                         </p>
                         <div className="space-y-2 border-t pt-2">
-                          {selectedOrder.items?.map((item, index) => (
+                          {selectedOrder.cartIds?.map((item, index) => (
                             <div
                               key={index}
                               className="flex justify-between text-sm"
@@ -226,7 +214,8 @@ export const OrderPage = () => {
                               <span className="text-gray-900">
                                 ₹
                                 {(
-                                  (item.price || 0) * (item.quantity || 0)
+                                  (item.foodId?.price || 0) *
+                                  (item.quantity || 0)
                                 ).toFixed(2)}
                               </span>
                             </div>
@@ -240,7 +229,7 @@ export const OrderPage = () => {
                           Order Total
                         </p>
                         <p className="text-lg font-bold text-gray-900">
-                          ₹{calculateTotal(selectedOrder.items).toFixed(2)}
+                          ₹{calculateTotal(selectedOrder.cartIds).toFixed(2)}
                         </p>
                       </div>
                     </div>
