@@ -23,6 +23,7 @@ import { getAllFoodItems } from "../services/adminAPI";
 import { addToCart } from "../services/cartAPI";
 import { likeFood, removeLike, fetchLikes } from "../services/likeAPI";
 import { toast, ToastContainer } from "react-toastify";
+import { addToLocalCart, isUserLoggedIn } from "../utils/cartUtils";
 import "react-toastify/dist/ReactToastify.css";
 
 export const Dashboard = () => {
@@ -37,21 +38,23 @@ export const Dashboard = () => {
   const [likedItems, setLikedItems] = useState([]);
   const navigate = useNavigate();
 
-   useEffect(() => {
-  const loadLikes = async () => {
-    try {
-      const likes = await fetchLikes(); // fetch all likes
-      const likedFoodIds = likes
-        .filter((like) => like.foodId) // skip null foodIds
-        .map((like) => like.foodId._id);
-      setLikedItems(likedFoodIds);
-    } catch (err) {
-      console.error("Failed to load likes", err);
-    }
-  };
-  loadLikes();
-}, []);
+  useEffect(() => {
+    const loadLikes = async () => {
+      // ✅ Only fetch if logged in
+      if (!isUserLoggedIn()) return;
 
+      try {
+        const likes = await fetchLikes();
+        const likedFoodIds = likes
+          .filter((like) => like.foodId)
+          .map((like) => like.foodId._id);
+        setLikedItems(likedFoodIds);
+      } catch (err) {
+        console.error("Failed to load likes", err);
+      }
+    };
+    loadLikes();
+  }, []);
 
   useEffect(() => {
     const fetchFoodData = async () => {
@@ -143,63 +146,65 @@ export const Dashboard = () => {
   };
 
   const handleAddToCart = async (foodItem) => {
-  // Check if user is logged in
-  const token = localStorage.getItem("token"); // assuming you store JWT or auth token in localStorage
-  if (!token) {
-    toast.info("Please login to add items to your cart! 🔒", {
-      position: "top-right",
-      autoClose: 3000,
-      theme: "colored",
-    });
-    return;
-  }
+    const isLoggedIn = isUserLoggedIn();
 
-  try {
-    // Check if item already exists in cart
-    const existingItem = cartItems.find(
-      (cartItem) => cartItem._id === foodItem._id
-    );
+    if (!isLoggedIn) {
+      const updatedCart = addToLocalCart(foodItem);
+      setCartItems(updatedCart);
 
-    // Send only the food ID
-    const cartData = foodItem._id;
-    const response = await addToCart(cartData);
-    console.log("Cart response:", response);
+      toast.success(`${foodItem.name} added to cart!`, {
+        position: "top-right",
+        autoClose: 2000,
+        theme: "colored",
+      });
+      return;
+    }
 
-    if (response && response.msg === "Item added to cart successfully") {
-      if (existingItem) {
-        // Increase quantity locally
-        setCartItems(
-          cartItems.map((cartItem) =>
-            cartItem._id === foodItem._id
-              ? { ...cartItem, quantity: cartItem.quantity + 1 }
-              : cartItem
-          )
-        );
+    // If logged in, add to database
+    try {
+      const existingItem = cartItems.find(
+        (cartItem) => cartItem._id === foodItem._id
+      );
 
-       
-      } else {
-        // Add new item
-        setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
+      const cartData = foodItem._id;
+      const response = await addToCart(cartData);
+      console.log("Cart response:", response);
 
-        toast.success(`${foodItem.name} added to cart! 🎉`, {
+      // ✅ Accept both success messages
+      if (
+        response &&
+        (response.msg === "Item added to cart successfully" ||
+          response.msg === "Item quantity updated in cart")
+      ) {
+        if (existingItem) {
+          setCartItems(
+            cartItems.map((cartItem) =>
+              cartItem._id === foodItem._id
+                ? { ...cartItem, quantity: cartItem.quantity + 1 }
+                : cartItem
+            )
+          );
+        } else {
+          setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
+        }
+
+        toast.success(`${foodItem.name} added to cart!`, {
           position: "top-right",
           autoClose: 2000,
           theme: "colored",
         });
+      } else {
+        throw new Error(response?.msg || "Failed to add to cart");
       }
-    } else {
-      throw new Error(response?.msg || "Failed to add to cart");
+    } catch (error) {
+      console.error("Failed to add item to cart:", error);
+      toast.error(`Failed to add ${foodItem.name} to cart. Please try again!`, {
+        position: "top-right",
+        autoClose: 4000,
+        theme: "colored",
+      });
     }
-  } catch (error) {
-    console.error("Failed to add item to cart:", error);
-    toast.error(`Failed to add ${foodItem.name} to cart. Please try again!`, {
-      position: "top-right",
-      autoClose: 4000,
-      theme: "colored",
-    });
-  }
-};
-
+  };
 
   const removeFromCart = (itemId) => {
     const existingItem = cartItems.find((cartItem) => cartItem._id === itemId);
@@ -238,6 +243,17 @@ export const Dashboard = () => {
   };
 
   const toggleFavorite = async (foodId) => {
+    // ✅ Check if user is logged in first
+    const isLoggedIn = isUserLoggedIn();
+
+    if (!isLoggedIn) {
+      toast.info("Please login to add favorites!", {
+        position: "top-right",
+        autoClose: 3000,
+      });
+      return;
+    }
+
     const foodItem = foodItems.find((item) => item._id === foodId);
     const isCurrentlyLiked = likedItems.includes(foodId);
 
@@ -251,12 +267,12 @@ export const Dashboard = () => {
     try {
       if (isCurrentlyLiked) {
         await removeLike(foodItem._id);
-        toast.warn(`Removed ${foodItem?.name} from favorites 💔`, {
+        toast.warn(`Removed ${foodItem?.name} from favorites`, {
           position: "bottom-left",
         });
       } else {
         await likeFood({ foodId });
-        toast.success(`Added ${foodItem?.name} to favorites! ❤️`, {
+        toast.success(`Added ${foodItem?.name} to favorites!`, {
           position: "bottom-left",
           theme: "dark",
         });
@@ -367,72 +383,72 @@ export const Dashboard = () => {
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-500"></div>
           </div>
 
-       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 lg:gap-12 items-center">
-    {/* Left side content */}
-    <div className="text-center lg:text-left">
-      <div className="inline-flex items-center bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs sm:text-sm font-semibold mb-2 sm:mb-4">
-        <span className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>
-        Free delivery on first order
-      </div>
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 lg:gap-12 items-center">
+              {/* Left side content */}
+              <div className="text-center lg:text-left">
+                <div className="inline-flex items-center bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs sm:text-sm font-semibold mb-2 sm:mb-4">
+                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>
+                  Free delivery on first order
+                </div>
 
-      <h1 className="text-2xl sm:text-3xl md:text-5xl lg:text-7xl font-extrabold text-gray-900 mb-3 sm:mb-6 leading-snug sm:leading-tight">
-        Craving
-        <span className="relative inline-block mx-1 sm:mx-2">
-          <span className="text-red-500">Food?</span>
-          <svg
-            className="absolute -bottom-1 left-0 w-full h-2 sm:h-3"
-            viewBox="0 0 200 12"
-            fill="none"
-          >
-            <path
-              d="M2 8C60 2 140 2 198 8"
-              stroke="#EF4444"
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
-        <br />
-        We've got you!
-      </h1>
+                <h1 className="text-2xl sm:text-3xl md:text-5xl lg:text-7xl font-extrabold text-gray-900 mb-3 sm:mb-6 leading-snug sm:leading-tight">
+                  Craving
+                  <span className="relative inline-block mx-1 sm:mx-2">
+                    <span className="text-red-500">Food?</span>
+                    <svg
+                      className="absolute -bottom-1 left-0 w-full h-2 sm:h-3"
+                      viewBox="0 0 200 12"
+                      fill="none"
+                    >
+                      <path
+                        d="M2 8C60 2 140 2 198 8"
+                        stroke="#EF4444"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </span>
+                  <br />
+                  We've got you!
+                </h1>
 
-      <p className="text-sm sm:text-base md:text-xl text-gray-700 mb-3 sm:mb-6 max-w-xs sm:max-w-md lg:max-w-lg mx-auto lg:mx-0">
-        Order from your favorite local restaurants and get it delivered fresh to your doorstep in minutes.
-      </p>
+                <p className="text-sm sm:text-base md:text-xl text-gray-700 mb-3 sm:mb-6 max-w-xs sm:max-w-md lg:max-w-lg mx-auto lg:mx-0">
+                  Order from your favorite local restaurants and get it
+                  delivered fresh to your doorstep in minutes.
+                </p>
 
-      {/* CTA Buttons */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center lg:justify-start mb-4 sm:mb-6">
-        <button
-          className="bg-red-500 hover:bg-red-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-          onClick={() => {
-            navigate("/restaurants");
-            toast.success("Let's find you something delicious! 🍽️", {
-              position: "top-center",
-              autoClose: 2000,
-              hideProgressBar: true,
-            });
-          }}
-        >
-          Order Now
-        </button>
-      </div>
-    </div>
+                {/* CTA Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center lg:justify-start mb-4 sm:mb-6">
+                  <button
+                    className="bg-red-500 hover:bg-red-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                    onClick={() => {
+                      navigate("/restaurants");
+                      toast.success("Let's find you something delicious! 🍽️", {
+                        position: "top-center",
+                        autoClose: 2000,
+                        hideProgressBar: true,
+                      });
+                    }}
+                  >
+                    Order Now
+                  </button>
+                </div>
+              </div>
 
-    {/* Right side image */}
-    <div className="relative">
-      <div className="relative z-10">
-        <div className="flex items-center justify-center text-center text-white min-h-[35vh] sm:min-h-[50vh] md:min-h-[73vh]">
-          <img
-            src="/burgers.png"
-            className="w-full h-full object-contain sm:object-cover"
-          />
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
+              {/* Right side image */}
+              <div className="relative">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-center text-center text-white min-h-[35vh] sm:min-h-[50vh] md:min-h-[73vh]">
+                    <img
+                      src="/burgers.png"
+                      className="w-full h-full object-contain sm:object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Mobile Search Bar */}

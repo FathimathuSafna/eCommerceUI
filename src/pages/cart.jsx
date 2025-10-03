@@ -7,6 +7,13 @@ import {
 } from "../services/cartAPI";
 import { placeOrder } from "../services/orderAPI";
 import { Navigation } from "../components/Navigation";
+import { 
+  getLocalCart, 
+  updateLocalCartQuantity, 
+  removeFromLocalCart,
+  isUserLoggedIn 
+} from "../utils/cartUtils";
+import { toast } from "react-toastify";
 
 const FoodCart = () => {
   const [cartItems, setCartItems] = useState([]);
@@ -14,14 +21,23 @@ const FoodCart = () => {
   const [deletingItems, setDeletingItems] = useState(new Set());
   const [placingOrder, setPlacingOrder] = useState(false);
   const [updatingItems, setUpdatingItems] = useState(new Set());
+  const isLoggedIn = isUserLoggedIn();
 
   const fetchCartData = async () => {
     try {
       setLoading(true);
-      const response = await getCartItems();
-      setCartItems(
-        response?.data && Array.isArray(response.data) ? response.data : []
-      );
+      
+      if (!isLoggedIn) {
+        // Load from localStorage for guest users
+        const localCart = getLocalCart();
+        setCartItems(localCart);
+      } else {
+        // Load from database for logged-in users
+        const response = await getCartItems();
+        setCartItems(
+          response?.data && Array.isArray(response.data) ? response.data : []
+        );
+      }
     } catch (error) {
       console.error("Failed to fetch cart items:", error);
       setCartItems([]);
@@ -32,24 +48,29 @@ const FoodCart = () => {
 
   useEffect(() => {
     fetchCartData();
-  }, []);
+  }, [isLoggedIn]);
 
   const handleQuantityChange = async (itemId, newQuantity) => {
-    // Optimistically update the UI for a faster user experience
+    // Optimistically update the UI
     setCartItems((prevItems) =>
       prevItems.map((item) =>
         item._id === itemId ? { ...item, quantity: newQuantity } : item
       )
     );
 
+    if (!isLoggedIn) {
+      // Update localStorage for guest users
+      updateLocalCartQuantity(itemId, newQuantity);
+      return;
+    }
+
+    // Update database for logged-in users
     setUpdatingItems((prev) => new Set(prev).add(itemId));
     try {
-      // Call the API to update the item in the database
       await updateCartItem(itemId, { quantity: newQuantity });
     } catch (error) {
       console.error("Failed to update quantity:", error);
-      alert("Failed to update quantity. Please try again.");
-      // If the API call fails, revert the change by re-fetching data
+      toast.error("Failed to update quantity. Please try again.");
       fetchCartData();
     } finally {
       setUpdatingItems((prev) => {
@@ -61,17 +82,22 @@ const FoodCart = () => {
   };
 
   const handlePlaceOrder = async (amount) => {
+    if (!isLoggedIn) {
+      toast.info("Please login to place an order!", {
+        position: "top-right",
+        autoClose: 3000,
+      });
+      return;
+    }
+
     try {
       setPlacingOrder(true);
 
-      // ✅ Collect only cart IDs
       const cartIds = cartItems.map((item) => item._id);
-
-      // Send cartIds + amount
       const { order, razorpayOrder } = await placeOrder({ cartIds, amount });
 
       if (!razorpayOrder?.id) {
-        alert("Failed to create order");
+        toast.error("Failed to create order");
         return;
       }
 
@@ -83,7 +109,11 @@ const FoodCart = () => {
         script.onerror = () => resolve(false);
         document.body.appendChild(script);
       });
-      if (!res) return alert("Razorpay SDK failed to load");
+      
+      if (!res) {
+        toast.error("Razorpay SDK failed to load");
+        return;
+      }
 
       // Open Razorpay checkout
       const options = {
@@ -96,7 +126,7 @@ const FoodCart = () => {
         handler: (response) => {
           console.log("Payment success:", response);
           console.log("Order info:", order);
-          alert("Payment successful!");
+          toast.success("Payment successful!");
         },
         theme: { color: "#f97316" },
       };
@@ -107,7 +137,7 @@ const FoodCart = () => {
       await fetchCartData();
     } catch (error) {
       console.error("Error placing order:", error);
-      alert("Could not create order");
+      toast.error("Could not create order");
     } finally {
       setPlacingOrder(false);
     }
@@ -116,11 +146,21 @@ const FoodCart = () => {
   const deleteCart = async (itemId) => {
     try {
       setDeletingItems((prev) => new Set(prev).add(itemId));
-      await removeFromCart(itemId);
-      setCartItems((items) => items.filter((item) => item._id !== itemId));
+
+      if (!isLoggedIn) {
+        // Remove from localStorage for guest users
+        const updatedCart = removeFromLocalCart(itemId);
+        setCartItems(updatedCart);
+        toast.success("Item removed from cart");
+      } else {
+        // Remove from database for logged-in users
+        await removeFromCart(itemId);
+        setCartItems((items) => items.filter((item) => item._id !== itemId));
+        toast.success("Item removed from cart");
+      }
     } catch (error) {
       console.error("Failed to remove item from cart:", error);
-      alert("Failed to remove item from cart. Please try again.");
+      toast.error("Failed to remove item from cart. Please try again.");
     } finally {
       setDeletingItems((prev) => {
         const newSet = new Set(prev);
@@ -132,7 +172,8 @@ const FoodCart = () => {
 
   // Calculations
   const subtotal = cartItems.reduce((sum, item) => {
-    const price = item.foodId?.price || 0;
+    // Handle both DB format (foodId) and localStorage format (direct properties)
+    const price = item.foodId?.price || item.price || 0;
     return sum + price * item.quantity;
   }, 0);
 
@@ -167,95 +208,96 @@ const FoodCart = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {cartItems.map(
-                    (item) =>
-                      item.foodId && (
-                        <div
-                          key={item._id}
-                          className="border border-gray-200 rounded-lg p-4"
-                        >
-                          <div className="flex gap-4">
-                            <img
-                              src={
-                                item.foodId.image ||
-                                "https://placehold.co/120x120?text=Food"
-                              }
-                              alt={item.foodId.name}
-                              className="w-20 h-20 rounded-lg object-cover"
-                            />
-                            <div className="flex-1">
-                              <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <h3 className="font-semibold text-gray-800">
-                                    {item.foodId.name}
-                                  </h3>
-                                  <p className="text-sm text-gray-500">
-                                    {item.foodId.restaurant?.restaurantsName ||
-                                      "A great restaurant"}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-3 border border-gray-200 rounded-full px-2 py-1">
-                                  <button
-                                    onClick={() =>
-                                      item.quantity > 1
-                                        ? handleQuantityChange(
-                                            item._id,
-                                            item.quantity - 1
-                                          )
-                                        : deleteCart(item._id)
-                                    }
-                                    disabled={
-                                      updatingItems.has(item._id) ||
-                                      deletingItems.has(item._id)
-                                    }
-                                    className="text-gray-500 hover:text-red-500 disabled:opacity-50"
-                                  >
-                                    {item.quantity > 1 ? (
-                                      <Minus className="w-4 h-4" />
-                                    ) : (
-                                      <Trash2 className="w-4 h-4 text-red-500" />
-                                    )}
-                                  </button>
+                  {cartItems.map((item) => {
+                    // Handle both DB format and localStorage format
+                    const foodData = item.foodId || item;
+                    const imageUrl = foodData.image || "https://placehold.co/120x120?text=Food";
+                    const foodName = foodData.name || "Food Item";
+                    const foodPrice = foodData.price || 0;
+                    const restaurantName = foodData.restaurant?.restaurantsName || 
+                                          foodData.restaurantId?.restaurantsName || 
+                                          "Restaurant";
 
-                                  {updatingItems.has(item._id) ||
-                                  deletingItems.has(item._id) ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                  ) : (
-                                    <span className="w-5 text-center font-semibold">
-                                      {item.quantity}
-                                    </span>
-                                  )}
-
-                                  <button
-                                    onClick={() =>
-                                      handleQuantityChange(
-                                        item._id,
-                                        item.quantity + 1
-                                      )
-                                    }
-                                    disabled={
-                                      updatingItems.has(item._id) ||
-                                      deletingItems.has(item._id)
-                                    }
-                                    className="text-gray-500 hover:text-orange-500 disabled:opacity-50"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                </div>
-                                <p className="font-semibold text-lg text-gray-800">
-                                  ₹
-                                  {(item.foodId.price * item.quantity).toFixed(
-                                    2
-                                  )}
+                    return (
+                      <div
+                        key={item._id}
+                        className="border border-gray-200 rounded-lg p-4"
+                      >
+                        <div className="flex gap-4">
+                          <img
+                            src={imageUrl}
+                            alt={foodName}
+                            className="w-20 h-20 rounded-lg object-cover"
+                          />
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <h3 className="font-semibold text-gray-800">
+                                  {foodName}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  {restaurantName}
                                 </p>
                               </div>
                             </div>
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-3 border border-gray-200 rounded-full px-2 py-1">
+                                <button
+                                  onClick={() =>
+                                    item.quantity > 1
+                                      ? handleQuantityChange(
+                                          item._id,
+                                          item.quantity - 1
+                                        )
+                                      : deleteCart(item._id)
+                                  }
+                                  disabled={
+                                    updatingItems.has(item._id) ||
+                                    deletingItems.has(item._id)
+                                  }
+                                  className="text-gray-500 hover:text-red-500 disabled:opacity-50"
+                                >
+                                  {item.quantity > 1 ? (
+                                    <Minus className="w-4 h-4" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  )}
+                                </button>
+
+                                {updatingItems.has(item._id) ||
+                                deletingItems.has(item._id) ? (
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                  <span className="w-5 text-center font-semibold">
+                                    {item.quantity}
+                                  </span>
+                                )}
+
+                                <button
+                                  onClick={() =>
+                                    handleQuantityChange(
+                                      item._id,
+                                      item.quantity + 1
+                                    )
+                                  }
+                                  disabled={
+                                    updatingItems.has(item._id) ||
+                                    deletingItems.has(item._id)
+                                  }
+                                  className="text-gray-500 hover:text-orange-500 disabled:opacity-50"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <p className="font-semibold text-lg text-gray-800">
+                                ₹{(foodPrice * item.quantity).toFixed(2)}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      )
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -297,6 +339,8 @@ const FoodCart = () => {
                   </div>
                 ) : cartItems.length === 0 ? (
                   "Cart is Empty"
+                ) : !isLoggedIn ? (
+                  "Login to Checkout"
                 ) : (
                   "Proceed to Checkout"
                 )}

@@ -23,13 +23,14 @@ import { addToCart } from "../services/cartAPI";
 import { getAllFoodItems } from "../services/adminAPI";
 import { Navigation } from "../components/Navigation";
 import { useNavigate } from "react-router-dom";
+import { addToLocalCart, isUserLoggedIn } from "../utils/cartUtils"; // ✅ Add import
 
 export const FoodDisplayUI = () => {
   const [foodItems, setFoodItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   const [favorites, setFavorites] = useState([]);
-  const [cart, setCart] = useState([]);
+  const [cartItems, setCartItems] = useState([]); // ✅ Use consistent name
   const [selectedFood, setSelectedFood] = useState(null);
   const [showFoodDetail, setShowFoodDetail] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -57,24 +58,50 @@ export const FoodDisplayUI = () => {
         food.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleAddToCart = async (food) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Please log in to add items to your cart.");
-      setIsAuthModalOpen(true);
+  const handleAddToCart = async (foodItem) => {
+    const isLoggedIn = isUserLoggedIn();
+
+    if (!isLoggedIn) {
+      const updatedCart = addToLocalCart(foodItem);
+      setCartItems(updatedCart);
+
+      toast.success(`${foodItem.name} added to cart!`);
       return;
     }
-    if (isInCart(food._id)) {
-      toast("This item is already in your cart.", { icon: "ℹ️" });
-      return;
-    }
+
+    // If logged in, add to database
     try {
-      await addToCart(food._id, token);
-      toast.success(`${food.name} added to cart!`);
-      setCart([...cart, { ...food, quantity: 1 }]);
+      const existingItem = cartItems.find(
+        (cartItem) => cartItem._id === foodItem._id
+      );
+
+      const cartData = foodItem._id;
+      const response = await addToCart(cartData);
+
+      if (
+        response &&
+        (response.msg === "Item added to cart successfully" ||
+          response.msg === "Item quantity updated in cart")
+      ) {
+        if (existingItem) {
+          setCartItems(
+            cartItems.map((cartItem) =>
+              cartItem._id === foodItem._id
+                ? { ...cartItem, quantity: cartItem.quantity + 1 }
+                : cartItem
+            )
+          );
+        } else {
+          setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
+        }
+
+        toast.success(`${foodItem.name} added to cart!`);
+      } else {
+        throw new Error(response?.msg || "Failed to add to cart");
+      }
     } catch (error) {
       console.error("Failed to add item to cart:", error);
-      toast.error("Could not add item to cart.");
+      toast.error(`Failed to add ${foodItem.name} to cart. Please try again!`);
     }
   };
 
@@ -84,7 +111,7 @@ export const FoodDisplayUI = () => {
   };
 
   const isInCart = (foodId) => {
-    return cart.some((item) => item._id === foodId);
+    return cartItems.some((item) => item._id === foodId); // ✅ Use cartItems
   };
 
   const toggleFavorite = (foodId) => {
@@ -114,9 +141,7 @@ export const FoodDisplayUI = () => {
             Back
           </button>
 
-          {/* Flex container for Search and View Controls */}
           <div className="mb-6 flex items-center justify-between gap-4">
-            {/* Search Input (takes up remaining space) */}
             <div className="relative flex-grow">
               <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
               <input
@@ -128,7 +153,6 @@ export const FoodDisplayUI = () => {
               />
             </div>
 
-            {/* View Mode Buttons (fixed width) */}
             <div className="hidden sm:flex border border-gray-300 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode("grid")}
@@ -153,6 +177,7 @@ export const FoodDisplayUI = () => {
             </div>
           </div>
 
+          {/* Rest of your JSX remains the same */}
           {filteredFoods.length > 0 ? (
             viewMode === "grid" ? (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -218,6 +243,7 @@ export const FoodDisplayUI = () => {
                 ))}
               </div>
             ) : (
+              // List view code remains the same...
               <div className="space-y-4">
                 {filteredFoods.map((food) => (
                   <div
@@ -293,6 +319,7 @@ export const FoodDisplayUI = () => {
         </main>
       </div>
 
+      {/* Detail modal remains the same */}
       {showFoodDetail && selectedFood && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white">

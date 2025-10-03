@@ -1,8 +1,12 @@
+// Updated AuthModal with Cart Sync
 import React, { useState } from "react";
 import { Box, Modal, Typography, TextField, Button, Link } from "@mui/material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { login, signup } from "../services/userApi.js";
+import { syncCartWithDB } from "../services/cartAPI";
+import { getLocalCart, clearLocalCart } from "../utils/cartUtils";
+import { toast } from "react-toastify";
 
 const modalStyle = {
   position: "absolute",
@@ -49,64 +53,93 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
     },
     validationSchema,
     onSubmit: async (values, { setSubmitting, resetForm }) => {
-  setApiMessage({ text: "", type: "" });
+      setApiMessage({ text: "", type: "" });
 
-  try {
-    let response;
-if (isLogin) {
-  // --- Login Flow ---
-  response = await login({
-    email: values.email,
-    password: values.password,
-  });
+      try {
+        let response;
+        if (isLogin) {
+          // --- Login Flow with Cart Sync ---
+          response = await login({
+            email: values.email,
+            password: values.password,
+          });
 
-  // ✅ CORRECTED: Check for 'response.data', which contains the token
-  if (response && response.data) {
-    // ✅ CORRECTED: Save the token from 'response.data'
-    localStorage.setItem("token", response.data);
-    onAuthSuccess();
-    handleClose();
-  } else {
-    setApiMessage({
-      text: response.msg || "Login failed: Invalid credentials.",
-      type: "error",
-    });
-  }
-} else {
-      // --- Signup Flow ---
-      response = await signup({
-        fullName: values.fullName,
-        email: values.email,
-        password: values.password,
-        phoneNumber: values.phoneNumber,
-      });
+          if (response && response.data) {
+            // Save the token
+            localStorage.setItem("token", response.data);
 
-       if (response && response.msg) {
+            // Get localStorage cart
+            const localCart = getLocalCart();
+
+            // Sync cart with database if there are items
+            if (localCart && localCart.length > 0) {
+              try {
+                await syncCartWithDB(localCart);
+                
+                // Clear localStorage cart after successful sync
+                clearLocalCart();
+                
+                toast.success(
+                  `Login successful! Your ${localCart.length} cart items have been synced!`,
+                  {
+                    position: "top-right",
+                    autoClose: 3000,
+                  }
+                );
+              } catch (syncError) {
+                console.error("Cart sync failed:", syncError);
+                toast.warning("Login successful, but cart sync failed. Please check your cart.", {
+                  position: "top-right",
+                  autoClose: 4000,
+                });
+              }
+            } else {
+              toast.success("Login successful! Welcome back!", {
+                position: "top-right",
+                autoClose: 2000,
+              });
+            }
+
+            onAuthSuccess();
+            handleClose();
+          } else {
+            setApiMessage({
+              text: response.msg || "Login failed: Invalid credentials.",
+              type: "error",
+            });
+          }
+        } else {
+          // --- Signup Flow ---
+          response = await signup({
+            fullName: values.fullName,
+            email: values.email,
+            password: values.password,
+            phoneNumber: values.phoneNumber,
+          });
+
+          if (response && response.msg) {
+            setApiMessage({
+              text: response.msg + " Please login.",
+              type: "success",
+            });
+            resetForm();
+            setIsLogin(true);
+          } else {
+            setApiMessage({
+              text: "Signup failed: Invalid response from server.",
+              type: "error",
+            });
+          }
+        }
+      } catch (error) {
         setApiMessage({
-          text: response.msg + " Please login.",
-          type: "success",
-        });
-        resetForm();
-        setIsLogin(true);
-      } else {
-        setApiMessage({
-          text: "Signup failed: Invalid response from server.",
+          text: error.response?.msg || "An error occurred.",
           type: "error",
         });
+      } finally {
+        setSubmitting(false);
       }
-    
-      
-      // The second, problematic if/else block that was here has been removed.
-    }
-  } catch (error) {
-    setApiMessage({
-      text: error.response?.msg|| "An error occurred.",
-      type: "error",
-    });
-  } finally {
-    setSubmitting(false);
-  }
-},
+    },
   });
 
   const toggleAuthMode = () => {
@@ -219,7 +252,7 @@ if (isLogin) {
         </form>
 
         <Typography variant="body2" sx={{ mt: 2, textAlign: "center" }}>
-          {isLogin ? "Don’t have an account? " : "Already have an account? "}
+          {isLogin ? "Don't have an account? " : "Already have an account? "}
           <Link component="button" variant="body2" onClick={toggleAuthMode}>
             {isLogin ? "Sign Up" : "Login"}
           </Link>
