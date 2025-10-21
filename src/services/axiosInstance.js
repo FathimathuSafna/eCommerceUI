@@ -1,7 +1,9 @@
 import axios from "axios";
 
 export const baseURL =
-  import.meta.env.VITE_API_URL ||"https://ecommerceapi-judn.onrender.com";
+  import.meta.env.VITE_API_URL || "https://ecommerceapi-judn.onrender.com";
+
+  //"http://localhost:5000"
 
 const createAxiosInstance = (baseURL, defaultHeaders = {}) => {
   return axios.create({
@@ -10,7 +12,7 @@ const createAxiosInstance = (baseURL, defaultHeaders = {}) => {
       "Content-Type": "application/json",
       ...defaultHeaders,
     },
-    // withCredentials: true,
+    withCredentials: true,
   });
 };
 

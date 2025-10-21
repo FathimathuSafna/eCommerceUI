@@ -1,4 +1,4 @@
-// Updated AuthModal with Cart Sync
+// Updated AuthModal with Cart Sync and Dashboard Refresh
 import React, { useState } from "react";
 import { Box, Modal, Typography, TextField, Button, Link } from "@mui/material";
 import { useFormik } from "formik";
@@ -100,8 +100,19 @@ export const AuthModal = ({ open, handleClose, onAuthSuccess }) => {
               });
             }
 
-            onAuthSuccess();
+            // ✅ Close modal first
             handleClose();
+            
+            // ✅ Call onAuthSuccess if provided
+            if (onAuthSuccess) {
+              onAuthSuccess();
+            }
+            
+            // ✅ Refresh the page to reload dashboard with logged-in state
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+            
           } else {
             setApiMessage({
               text: response.msg || "Login failed: Invalid credentials.",
