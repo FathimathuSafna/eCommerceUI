@@ -46,19 +46,19 @@ const setupInterceptors = (instance) => {
   );
 };
 
-export const USER_INSTANCE = createAxiosInstance(`${baseURL}/user/`);
+export const USER_INSTANCE = createAxiosInstance(`${baseURL}/user`);
 setupInterceptors(USER_INSTANCE);
 
-export const ADMIN_INSTANCE = createAxiosInstance(`${baseURL}/admin/`);
+export const ADMIN_INSTANCE = createAxiosInstance(`${baseURL}/admin`);
 setupInterceptors(ADMIN_INSTANCE);
 
-export const CART_INSTANCE = createAxiosInstance(`${baseURL}/cart/`);
+export const CART_INSTANCE = createAxiosInstance(`${baseURL}/cart`);
 setupInterceptors(CART_INSTANCE);
 
-export const ORDER_INSTANCE = createAxiosInstance(`${baseURL}/order/`);
+export const ORDER_INSTANCE = createAxiosInstance(`${baseURL}/order`);
 setupInterceptors(ORDER_INSTANCE);
 
-export const LIKE_INSTANCE = createAxiosInstance(`${baseURL}/likes/`)
+export const LIKE_INSTANCE = createAxiosInstance(`${baseURL}/likes`)
 setupInterceptors(LIKE_INSTANCE)
 
 

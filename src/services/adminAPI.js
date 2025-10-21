@@ -65,7 +65,6 @@ export const addFoodItem = async (data) => {
 export const getAllFoodItems = async (data) => {
   try {
     console.log("during data before fetching",data );
-
     const response = await ADMIN_INSTANCE.get("/food");
     console.log("response get all",response.data)
     console.log("during data", response.data);
