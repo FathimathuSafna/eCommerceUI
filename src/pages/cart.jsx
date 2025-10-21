@@ -5,13 +5,15 @@ import {
   removeFromCart,
   updateCartItem,
 } from "../services/cartAPI";
-import { placeOrder } from "../services/orderAPI";
+import { placeOrder, verifyPayment } from "../services/orderAPI";
+import { getMyProfile } from "../services/userApi";
 import { Navigation } from "../components/Navigation";
-import { 
-  getLocalCart, 
-  updateLocalCartQuantity, 
+import AddressSelectionModal from "../components/addressModal";
+import {
+  getLocalCart,
+  updateLocalCartQuantity,
   removeFromLocalCart,
-  isUserLoggedIn 
+  isUserLoggedIn,
 } from "../utils/cartUtils";
 import { toast } from "react-toastify";
 
@@ -21,37 +23,51 @@ const FoodCart = () => {
   const [deletingItems, setDeletingItems] = useState(new Set());
   const [placingOrder, setPlacingOrder] = useState(false);
   const [updatingItems, setUpdatingItems] = useState(new Set());
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [orderAmount, setOrderAmount] = useState(0);
   const isLoggedIn = isUserLoggedIn();
 
-  const fetchCartData = async () => {
+ const fetchCartData = async () => {
+  try {
+    setLoading(true);
+
+    if (!isLoggedIn) {
+      const localCart = getLocalCart();
+      setCartItems(localCart);
+    } else {
+      const response = await getCartItems();
+      setCartItems(
+        response?.data && Array.isArray(response.data) ? response.data : []
+      );
+    }
+  } catch (error) {
+    console.error("Failed to fetch cart items:", error);
+    setCartItems([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const fetchUserProfile = async () => {
+    if (!isLoggedIn) return;
+
     try {
-      setLoading(true);
-      
-      if (!isLoggedIn) {
-        // Load from localStorage for guest users
-        const localCart = getLocalCart();
-        setCartItems(localCart);
-      } else {
-        // Load from database for logged-in users
-        const response = await getCartItems();
-        setCartItems(
-          response?.data && Array.isArray(response.data) ? response.data : []
-        );
-      }
+      const response = await getMyProfile();
+      setUserProfile(response.data);
     } catch (error) {
-      console.error("Failed to fetch cart items:", error);
-      setCartItems([]);
-    } finally {
-      setLoading(false);
+      console.error("Failed to fetch user profile:", error);
     }
   };
 
   useEffect(() => {
     fetchCartData();
+    if (isLoggedIn) {
+      fetchUserProfile();
+    }
   }, [isLoggedIn]);
 
   const handleQuantityChange = async (itemId, newQuantity) => {
-    // Optimistically update the UI
     setCartItems((prevItems) =>
       prevItems.map((item) =>
         item._id === itemId ? { ...item, quantity: newQuantity } : item
@@ -59,12 +75,10 @@ const FoodCart = () => {
     );
 
     if (!isLoggedIn) {
-      // Update localStorage for guest users
       updateLocalCartQuantity(itemId, newQuantity);
       return;
     }
 
-    // Update database for logged-in users
     setUpdatingItems((prev) => new Set(prev).add(itemId));
     try {
       await updateCartItem(itemId, { quantity: newQuantity });
@@ -81,7 +95,7 @@ const FoodCart = () => {
     }
   };
 
-  const handlePlaceOrder = async (amount) => {
+  const handleCheckout = (amount) => {
     if (!isLoggedIn) {
       toast.info("Please login to place an order!", {
         position: "top-right",
@@ -90,32 +104,34 @@ const FoodCart = () => {
       return;
     }
 
+    // Store the amount and show address modal
+    setOrderAmount(amount);
+    setShowAddressModal(true);
+  };
+
+  const handleAddressConfirm = async (addressData) => {
+    setShowAddressModal(false);
+
     try {
       setPlacingOrder(true);
-
-      const cartIds = cartItems.map((item) => item._id);
-      const { order, razorpayOrder } = await placeOrder({ cartIds, amount });
-
-      if (!razorpayOrder?.id) {
-        toast.error("Failed to create order");
-        return;
-      }
-
-      // Load Razorpay SDK
-      const res = await new Promise((resolve) => {
-        const script = document.createElement("script");
-        script.src = "https://checkout.razorpay.com/v1/checkout.js";
-        script.onload = () => resolve(true);
-        script.onerror = () => resolve(false);
-        document.body.appendChild(script);
+      const fullAddress = `${addressData.address}, ${addressData.pincode}`;
+      const orderResponse = await placeOrder({
+        amount: orderAmount,
+        address: fullAddress,
       });
-      
-      if (!res) {
-        toast.error("Razorpay SDK failed to load");
+      if (!orderResponse.success || !orderResponse.razorpayOrder?.id) {
+        toast.error("Failed to create order");
+        setPlacingOrder(false);
         return;
       }
 
-      // Open Razorpay checkout
+      const { razorpayOrder } = orderResponse;
+      const sdkLoaded = await loadRazorpaySDK();
+      if (!sdkLoaded) {
+        toast.error("Razorpay SDK failed to load");
+        setPlacingOrder(false);
+        return;
+      }
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: razorpayOrder.amount,
@@ -123,24 +139,99 @@ const FoodCart = () => {
         name: "Your Store",
         description: "Order Payment",
         order_id: razorpayOrder.id,
-        handler: (response) => {
-          console.log("Payment success:", response);
-          console.log("Order info:", order);
-          toast.success("Payment successful!");
+
+        handler: async (response) => {
+          try {
+            // Verify payment with backend
+            const verificationData = await verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              amount: orderAmount,
+              address: fullAddress,
+            });
+
+            if (verificationData.success) {
+              toast.success(" Order placed successfully!");
+              fetchCartData(); 
+            } else {
+              toast.error(
+                verificationData.msg || "Payment verification failed"
+              );
+            }
+          } catch (error) {
+            console.error("Verification error:", error);
+            toast.error("Payment verification failed");
+          } finally {
+            setPlacingOrder(false);
+          }
+        },
+        modal: {
+          ondismiss: async () => {
+            console.log("Payment dismissed/failed");
+
+            try {
+              await handlePaymentFailure({
+                razorpay_order_id: razorpayOrder.id,
+                error: "Payment cancelled by user",
+              });
+            } catch (error) {
+              console.error("Failed to update payment status:", error);
+            }
+
+            setPlacingOrder(false);
+            toast.error("❌ Payment cancelled");
+          },
+        },
+
+        prefill: {
+          name: userProfile?.fullName || "",
+          email: userProfile?.email || "",
+          contact: userProfile?.phoneNumber || "",
         },
         theme: { color: "#f97316" },
       };
 
       const rzp = new window.Razorpay(options);
-      rzp.open();
 
-      await fetchCartData();
+      rzp.on("payment.failed", async (response) => {
+        console.log("Payment failed:", response.error);
+
+        try {
+          await handlePaymentFailure({
+            razorpay_order_id: razorpayOrder.id,
+            error: response.error.description,
+          });
+          toast.error(` Payment failed: ${response.error.description}`);
+        } catch (error) {
+          console.error("Failed to update payment status:", error);
+        }
+
+        setPlacingOrder(false);
+      });
+
+      rzp.open();
     } catch (error) {
-      console.error("Error placing order:", error);
-      toast.error("Could not create order");
-    } finally {
+      console.error("Checkout error:", error);
+      toast.error("Could not initiate payment");
       setPlacingOrder(false);
     }
+  };
+
+  // Helper to load SDK
+  const loadRazorpaySDK = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   };
 
   const deleteCart = async (itemId) => {
@@ -148,12 +239,10 @@ const FoodCart = () => {
       setDeletingItems((prev) => new Set(prev).add(itemId));
 
       if (!isLoggedIn) {
-        // Remove from localStorage for guest users
         const updatedCart = removeFromLocalCart(itemId);
         setCartItems(updatedCart);
         toast.success("Item removed from cart");
       } else {
-        // Remove from database for logged-in users
         await removeFromCart(itemId);
         setCartItems((items) => items.filter((item) => item._id !== itemId));
         toast.success("Item removed from cart");
@@ -172,18 +261,24 @@ const FoodCart = () => {
 
   // Calculations
   const subtotal = cartItems.reduce((sum, item) => {
-    // Handle both DB format (foodId) and localStorage format (direct properties)
     const price = item.foodId?.price || item.price || 0;
     return sum + price * item.quantity;
   }, 0);
 
-  const deliveryFee = 50;
-  const tax = subtotal * 0.05;
-  const total = subtotal + deliveryFee + tax;
+  const deliveryFee = 0;
+  const tax = subtotal * 0;
+  const total = subtotal;
+  // + deliveryFee + tax;
 
   return (
     <>
       <Navigation white />
+      <AddressSelectionModal
+        isOpen={showAddressModal}
+        onClose={() => setShowAddressModal(false)}
+        onConfirm={handleAddressConfirm}
+        userProfile={userProfile}
+      />
       <div className="max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Cart Items */}
@@ -209,14 +304,16 @@ const FoodCart = () => {
               ) : (
                 <div className="space-y-4">
                   {cartItems.map((item) => {
-                    // Handle both DB format and localStorage format
                     const foodData = item.foodId || item;
-                    const imageUrl = foodData.image || "https://placehold.co/120x120?text=Food";
+                    const imageUrl =
+                      foodData.image ||
+                      "https://placehold.co/120x120?text=Food";
                     const foodName = foodData.name || "Food Item";
                     const foodPrice = foodData.price || 0;
-                    const restaurantName = foodData.restaurant?.restaurantsName || 
-                                          foodData.restaurantId?.restaurantsName || 
-                                          "Restaurant";
+                    const restaurantName =
+                      foodData.restaurant?.restaurantsName ||
+                      foodData.restaurantId?.restaurantsName ||
+                      "Restaurant";
 
                     return (
                       <div
@@ -312,14 +409,14 @@ const FoodCart = () => {
                   <span>Subtotal</span>
                   <span>₹{subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
+                {/* <div className="flex justify-between text-sm">
                   <span>Delivery fee</span>
                   <span>₹{deliveryFee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
+                </div> */}
+                {/* <div className="flex justify-between text-sm">
                   <span>Tax</span>
                   <span>₹{tax.toFixed(2)}</span>
-                </div>
+                </div> */}
                 <div className="border-t pt-3 mt-3">
                   <div className="flex justify-between font-semibold text-lg">
                     <span>Total</span>
@@ -328,7 +425,7 @@ const FoodCart = () => {
                 </div>
               </div>
               <button
-                onClick={() => handlePlaceOrder(total)}
+                onClick={() => handleCheckout(total)}
                 disabled={cartItems.length === 0 || loading || placingOrder}
                 className="w-full bg-orange-500 text-white py-3 rounded-lg font-semibold hover:bg-orange-600 disabled:bg-gray-300"
               >

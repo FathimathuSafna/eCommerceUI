@@ -37,6 +37,7 @@ export const Dashboard = () => {
   const [selectedFood, setSelectedFood] = useState(null);
   const [likedItems, setLikedItems] = useState([]);
   const navigate = useNavigate();
+  const isLoggedIn = isUserLoggedIn();
 
   useEffect(() => {
     const loadLikes = async () => {
@@ -172,10 +173,14 @@ export const Dashboard = () => {
 
       // ✅ Accept both success messages
       if (
-        response &&
-        (response.msg === "Item added to cart successfully" ||
-          response.msg === "Item quantity updated in cart")
-      ) {
+  response &&
+  (response.msg === "Item added to cart successfully" ||
+   response.msg === "Item quantity updated in cart" ||
+   response.status === true || 
+   response.success === true ||
+   response.message?.toLowerCase().includes("added"))
+)
+ {
         if (existingItem) {
           setCartItems(
             cartItems.map((cartItem) =>
@@ -526,18 +531,20 @@ export const Dashboard = () => {
                           {foodItem.discount}% OFF
                         </span>
                       )}
-                      <button
-                        onClick={() => toggleFavorite(foodItem._id)}
-                        className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all duration-200 shadow-sm hover:shadow-md"
-                      >
-                        <Heart
-                          className={`w-4 h-4 transition-colors ${
-                            likedItems.includes(foodItem._id)
-                              ? "text-red-500 fill-current"
-                              : "text-gray-400"
-                          }`}
-                        />
-                      </button>
+                      {isLoggedIn && (
+                        <button
+                          onClick={() => toggleFavorite(foodItem._id)}
+                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all duration-200 shadow-sm hover:shadow-md"
+                        >
+                          <Heart
+                            className={`w-4 h-4 transition-colors ${
+                              likedItems.includes(foodItem._id)
+                                ? "text-red-500 fill-current"
+                                : "text-gray-400"
+                            }`}
+                          />
+                        </button>
+                      )}
                     </div>
                   </div>
 

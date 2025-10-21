@@ -93,7 +93,10 @@ export const RestaurantListUI = () => {
       if (
         response &&
         (response.msg === "Item added to cart successfully" ||
-          response.msg === "Item quantity updated in cart")
+          response.msg === "Item quantity updated in cart" ||
+          response.status === true ||
+          response.success === true ||
+          response.message?.toLowerCase().includes("added"))
       ) {
         const existingItem = cartItems.find((item) => item._id === foodId);
 
@@ -315,8 +318,7 @@ export const RestaurantListUI = () => {
                                   handleAddToCart(food._id);
                                 }}
                                 disabled={
-                                  !food.isAvailable ||
-                                  addingToCart === food._id
+                                  !food.isAvailable || addingToCart === food._id
                                 }
                                 className="w-full mt-1.5 bg-red-50 text-red-600 hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400 font-medium py-0.5 px-1 rounded text-xs transition-colors duration-200 disabled:cursor-not-allowed"
                               >
@@ -469,4 +471,4 @@ export const RestaurantListUI = () => {
       </div>
     </>
   );
-}
+};

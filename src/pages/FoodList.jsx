@@ -81,7 +81,10 @@ export const FoodDisplayUI = () => {
       if (
         response &&
         (response.msg === "Item added to cart successfully" ||
-          response.msg === "Item quantity updated in cart")
+          response.msg === "Item quantity updated in cart" ||
+          response.status === true ||
+          response.success === true ||
+          response.message?.toLowerCase().includes("added"))
       ) {
         if (existingItem) {
           setCartItems(

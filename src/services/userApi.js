@@ -36,6 +36,18 @@ export const getAllUsers = async () => {
   }
 }
 
+export const updateUser = async (id,data) =>{
+  try{
+    console.log("id is...",id)
+    const response = await USER_INSTANCE.put(`/${id}`,data)
+    return response.data
+  } catch (error){
+    console.error("Error by updating user:",error);
+    throw error
+    
+  }
+}
+
 export const deleteUser = async (id) => {
   try {
     const response = await USER_INSTANCE.delete(`/${id}`);
