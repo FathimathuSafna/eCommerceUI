@@ -15,6 +15,7 @@ import { FoodDisplayUI} from "./pages/FoodList";
 import { CombinedSearchUI } from "./pages/Search";
 import AdminDashboard from "./pages/admin/adminDashboard";
 import { AdminLogin } from "./pages/admin/adminLogin";
+import {FoodDetailPage} from './pages/food'
 
 import "./App.css";
 
@@ -88,6 +89,7 @@ const App = () => {
                 <FoodDisplayUI />
             }
           />
+          <Route path="/food/:id" element={<FoodDetailPage />} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />

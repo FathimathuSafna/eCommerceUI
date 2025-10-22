@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   ChefHat,
@@ -7,13 +7,18 @@ import {
   MapPin,
   Clock,
   ArrowLeft,
+  Minus,
 } from "lucide-react";
 import { getAllRestaurantsDetails } from "../services/userApi";
-import { addToCart } from "../services/cartAPI";
+import { addToCart, getCartItems, updateCartItem } from "../services/cartAPI";
 import { toast, ToastContainer } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { Navigation } from "../components/Navigation";
-import { addToLocalCart, isUserLoggedIn } from "../utils/cartUtils"; // ✅ Add import
+import {
+  addToLocalCart,
+  isUserLoggedIn,
+  // You may need to import updateLocalCartQuantity
+} from "../utils/cartUtils";
 
 import "react-toastify/dist/ReactToastify.css";
 
@@ -23,10 +28,17 @@ export const RestaurantListUI = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [addingToCart, setAddingToCart] = useState(null);
-  const [selectedFood, setSelectedFood] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [cartItems, setCartItems] = useState([]); // ✅ Add cart state
+  // --- REMOVED MODAL STATE ---
+  // const [selectedFood, setSelectedFood] = useState(null);
+  // const [showModal, setShowModal] = useState(false);
+  // --- END REMOVED MODAL STATE ---
+  const [cartItems, setCartItems] = useState([]);
   const navigate = useNavigate();
+  const isLoggedIn = isUserLoggedIn();
+
+  const getCartItem = (foodId) => {
+    return cartItems.find((item) => item._id === foodId);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,10 +70,94 @@ export const RestaurantListUI = () => {
     fetchData();
   }, []);
 
-  const handleAddToCart = async (foodId) => {
-    const isLoggedIn = isUserLoggedIn();
+  // Load cart data to sync quantity buttons
+  useEffect(() => {
+    const loadCartData = async () => {
+      if (isLoggedIn) {
+        try {
+          const response = await getCartItems();
+          if (response && response.success && Array.isArray(response.data)) {
+            const transformedCart = response.data.map((cartItem) => ({
+              ...cartItem.foodId,
+              quantity: cartItem.quantity,
+              cartId: cartItem._id, // Store the cartId
+            }));
+            setCartItems(transformedCart);
+          } else {
+            setCartItems([]);
+          }
+        } catch (err) {
+          console.error("Failed to load cart items", err);
+          setCartItems([]);
+        }
+      }
+    };
+    loadCartData();
+  }, [isLoggedIn]);
 
-    // Find the food item details
+  // --- Handle Quantity +/- (Uses the update API) ---
+  const handleUpdateQuantity = async (foodId, newQuantity) => {
+    if (!isLoggedIn) {
+      toast.info("Please log in to update your cart");
+      return;
+    }
+
+    const cartItem = getCartItem(foodId);
+    if (!cartItem || !cartItem.cartId) {
+      console.error("Cannot update quantity, cartId is missing.", cartItem);
+      return;
+    }
+    const cartId = cartItem.cartId;
+
+    setAddingToCart(foodId); // Reuse the loading state
+    const originalCart = [...cartItems];
+    try {
+      // Optimistic UI Update
+      if (newQuantity <= 0) {
+        setCartItems((prev) => prev.filter((item) => item._id !== foodId));
+      } else {
+        setCartItems((prev) =>
+          prev.map((item) =>
+            item._id === foodId ? { ...item, quantity: newQuantity } : item
+          )
+        );
+      }
+
+      const response = await updateCartItem(cartId, { quantity: newQuantity });
+
+      if (
+        !response ||
+        (!response.success &&
+          !response.msg?.includes("updated") &&
+          !response.msg?.includes("removed"))
+      ) {
+        throw new Error(response.msg || "Failed to update quantity");
+      }
+    } catch (error) {
+      console.error("Failed to update cart item:", error);
+      toast.error("Failed to update quantity.");
+      setCartItems(originalCart); // Rollback
+    } finally {
+      setAddingToCart(null);
+    }
+  };
+
+  const increaseQuantity = (foodId) => {
+    const cartItem = getCartItem(foodId);
+    if (cartItem) {
+      handleUpdateQuantity(foodId, cartItem.quantity + 1);
+    }
+  };
+
+  const decreaseQuantity = (foodId) => {
+    const cartItem = getCartItem(foodId);
+    if (cartItem) {
+      handleUpdateQuantity(foodId, cartItem.quantity - 1);
+    }
+  };
+
+  // --- Handle "Add to Cart" (Uses the add API) ---
+  const handleAddToCart = async (foodId) => {
     const foodItem = restaurants
       .flatMap((r) => r.foods)
       .find((f) => f._id === foodId);
@@ -72,51 +168,50 @@ export const RestaurantListUI = () => {
     }
 
     if (!isLoggedIn) {
-      // Add to localStorage for guest users
+      // Local cart logic
       const updatedCart = addToLocalCart(foodItem);
       setCartItems(updatedCart);
-
       toast.success(`${foodItem.name} added to cart!`, {
         position: "top-right",
         autoClose: 2000,
         hideProgressBar: true,
       });
-
       return;
     }
 
-    // If logged in, add to database
+    const existingItem = getCartItem(foodId);
+    if (existingItem) {
+      // If item exists, use the update quantity logic
+      await handleUpdateQuantity(foodId, existingItem.quantity + 1);
+      return;
+    }
+
+    // If item does NOT exist, add it for the first time
     try {
       setAddingToCart(foodId);
-      const response = await addToCart(foodId);
+      const response = await addToCart(foodId); // Sends foodId in URL param
 
       if (
         response &&
         (response.msg === "Item added to cart successfully" ||
-          response.msg === "Item quantity updated in cart" ||
-          response.status === true ||
-          response.success === true ||
-          response.message?.toLowerCase().includes("added"))
+          response.msg === "Item quantity updated in cart" || // Should be handled above
+          response.msg ===
+            "Item added to cart again after being ordered previously" ||
+          response.status === true)
       ) {
-        const existingItem = cartItems.find((item) => item._id === foodId);
-
-        if (existingItem) {
-          setCartItems(
-            cartItems.map((item) =>
-              item._id === foodId
-                ? { ...item, quantity: item.quantity + 1 }
-                : item
-            )
-          );
-        } else {
-          setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
-        }
+        // Update local state to match
+        setCartItems([
+          ...cartItems,
+          { ...foodItem, quantity: 1, cartId: response.data._id },
+        ]);
 
         toast.success(`${foodItem.name} added to cart!`, {
           position: "top-right",
           autoClose: 2000,
           hideProgressBar: true,
         });
+      } else {
+        throw new Error(response.msg || "Failed to add item");
       }
     } catch (err) {
       toast.error("Failed to add item. Please try again.", {
@@ -130,15 +225,10 @@ export const RestaurantListUI = () => {
     }
   };
 
-  const openFoodModal = (food) => {
-    setSelectedFood(food);
-    setShowModal(true);
-  };
-
-  const closeFoodModal = () => {
-    setSelectedFood(null);
-    setShowModal(false);
-  };
+  // --- REMOVED MODAL FUNCTIONS ---
+  // const openFoodModal = (food) => { ... };
+  // const closeFoodModal = () => { ... };
+  // --- END REMOVED FUNCTIONS ---
 
   const filteredRestaurants = restaurants.filter((restaurant) => {
     const matchesSearch =
@@ -279,7 +369,9 @@ export const RestaurantListUI = () => {
                             <div
                               key={food._id}
                               className="border border-gray-200 rounded-md p-1.5 hover:shadow-md transition-all duration-200 bg-gray-50 hover:bg-white cursor-pointer"
-                              onClick={() => openFoodModal(food)}
+                              // --- UPDATED CLICK HANDLER ---
+                              onClick={() => navigate(`/food/${food._id}`)}
+                              // --- END UPDATED HANDLER ---
                             >
                               <div className="w-full h-16 mb-1 overflow-hidden rounded-sm">
                                 <img
@@ -312,22 +404,65 @@ export const RestaurantListUI = () => {
                                 </div>
                               </div>
 
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddToCart(food._id);
-                                }}
-                                disabled={
-                                  !food.isAvailable || addingToCart === food._id
-                                }
-                                className="w-full mt-1.5 bg-red-50 text-red-600 hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400 font-medium py-0.5 px-1 rounded text-xs transition-colors duration-200 disabled:cursor-not-allowed"
-                              >
-                                {addingToCart === food._id ? (
-                                  <div className="w-3 h-3 border border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                                ) : (
-                                  "+"
-                                )}
-                              </button>
+                              {/* Button logic */}
+                              <div className="mt-1.5">
+                                {(() => {
+                                  const cartItem = getCartItem(food._id);
+                                  const isInCart = !!cartItem;
+                                  const isLoading = addingToCart === food._id;
+
+                                  if (isLoading) {
+                                    return (
+                                      <button
+                                        disabled
+                                        className="w-full bg-gray-100 text-gray-400 font-medium py-0.5 px-1 rounded text-xs cursor-not-allowed"
+                                      >
+                                        <div className="w-3 h-3 border border-red-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                      </button>
+                                    );
+                                  }
+
+                                  return !isInCart ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // Keep this to prevent navigation
+                                        handleAddToCart(food._id);
+                                      }}
+                                      disabled={!food.isAvailable}
+                                      className="w-full bg-red-50 text-red-600 hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400 font-medium py-0.5 px-1 rounded text-xs transition-colors duration-200 disabled:cursor-not-allowed"
+                                    >
+                                      +
+                                    </button>
+                                  ) : (
+                                    <div
+                                      className="flex items-center justify-between space-x-1 bg-red-50 rounded"
+                                      style={{ padding: "1px" }}
+                                    >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation(); // Keep this
+                                          decreaseQuantity(food._id);
+                                        }}
+                                        className="text-red-600 hover:bg-red-100 rounded-full p-0.5"
+                                      >
+                                        <Minus className="w-3 h-3" />
+                                      </button>
+                                      <span className="font-medium text-xs text-gray-900 px-1">
+                                        {cartItem.quantity}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation(); // Keep this
+                                          increaseQuantity(food._id);
+                                        }}
+                                        className="text-red-600 hover:bg-red-100 rounded-full p-0.5"
+                                      >
+                                        <PlusCircle className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -357,117 +492,6 @@ export const RestaurantListUI = () => {
             </div>
           )}
         </main>
-
-        {/* Food Details Modal */}
-        {showModal && selectedFood && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="relative">
-                <img
-                  src={
-                    selectedFood.image ||
-                    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=250&fit=crop"
-                  }
-                  alt={selectedFood.name}
-                  className="w-full h-48 object-cover rounded-t-lg"
-                />
-                <button
-                  onClick={closeFoodModal}
-                  className="absolute top-3 right-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all"
-                >
-                  <svg
-                    className="w-5 h-5 text-gray-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {selectedFood.name}
-                  </h2>
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      selectedFood.isAvailable
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {selectedFood.isAvailable ? "Available" : "Not Available"}
-                  </span>
-                </div>
-
-                <div className="text-2xl font-bold text-gray-900 mb-4">
-                  ₹{selectedFood.price}
-                </div>
-
-                {selectedFood.description && (
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                      Description
-                    </h3>
-                    <p className="text-gray-600 text-sm leading-relaxed">
-                      {selectedFood.description}
-                    </p>
-                  </div>
-                )}
-
-                {selectedFood.category && (
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                      Category
-                    </h3>
-                    <span className="inline-block bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">
-                      {selectedFood.category}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4 border-t">
-                  <button
-                    onClick={closeFoodModal}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAddToCart(selectedFood._id);
-                    }}
-                    disabled={
-                      !selectedFood.isAvailable ||
-                      addingToCart === selectedFood._id
-                    }
-                    className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
-                  >
-                    {addingToCart === selectedFood._id ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <PlusCircle className="w-5 h-5" />
-                        Add to Cart
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </>
   );

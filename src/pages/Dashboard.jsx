@@ -20,7 +20,7 @@ import Footer from "./footer";
 import { useNavigate } from "react-router-dom";
 import { Navigation } from "../components/Navigation";
 import { getAllFoodItems } from "../services/adminAPI";
-import { addToCart } from "../services/cartAPI";
+import { addToCart, updateCartItem, getCartItems } from "../services/cartAPI";
 import { likeFood, removeLike, fetchLikes } from "../services/likeAPI";
 import { toast, ToastContainer } from "react-toastify";
 import { addToLocalCart, isUserLoggedIn } from "../utils/cartUtils";
@@ -33,15 +33,17 @@ export const Dashboard = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [foodItems, setFoodItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedFood, setSelectedFood] = useState(null);
   const [likedItems, setLikedItems] = useState([]);
   const navigate = useNavigate();
   const isLoggedIn = isUserLoggedIn();
 
+  // Helper function to get cart item
+  const getCartItem = (foodId) => {
+    return cartItems.find((item) => item._id === foodId);
+  };
+
   useEffect(() => {
     const loadLikes = async () => {
-      // ✅ Only fetch if logged in
       if (!isUserLoggedIn()) return;
 
       try {
@@ -55,42 +57,23 @@ export const Dashboard = () => {
       }
     };
     loadLikes();
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const fetchFoodData = async () => {
       try {
         setLoading(true);
         const response = await getAllFoodItems();
-        // Limit to 6 items for dashboard display
         const limitedItems = Array.isArray(response.data)
           ? response.data.slice(0, 6)
           : [];
         setFoodItems(limitedItems);
-
-        // Success toast for data loading
-        // if (limitedItems.length > 0) {
-        //   toast.success(`Loaded ${limitedItems.length} delicious food items!`, {
-        //     position: "top-right",
-        //     autoClose: 3000,
-        //     hideProgressBar: false,
-        //     closeOnClick: true,
-        //     pauseOnHover: true,
-        //     draggable: true,
-        //   });
-        // }
       } catch (error) {
         console.error("Failed to fetch food items:", error);
         setFoodItems([]);
-
-        // Error toast for failed loading
         toast.error("Failed to load food items. Please refresh the page.", {
           position: "top-right",
           autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
         });
       } finally {
         setLoading(false);
@@ -98,6 +81,40 @@ export const Dashboard = () => {
     };
     fetchFoodData();
   }, []);
+
+  useEffect(() => {
+    const loadCartData = async () => {
+      if (isLoggedIn) {
+        try {
+          const response = await getCartItems();
+          console.log("Cart items response:", response);
+
+          if (response && response.success && Array.isArray(response.data)) {
+            const transformedCart = response.data.map((cartItem) => ({
+              ...cartItem.foodId,
+              quantity: cartItem.quantity,
+              cartId: cartItem._id
+            }));
+            setCartItems(transformedCart);
+          } else {
+            console.warn(
+              "Failed to get cart data or cart is empty:",
+              response?.msg
+            );
+            setCartItems([]);
+          }
+        } catch (err) {
+          console.error("Failed to load cart items", err);
+          toast.error("Could not load your cart. Please try again.");
+          setCartItems([]);
+        }
+      } else {
+        setCartItems([]);
+      }
+    };
+
+    loadCartData();
+  }, [isLoggedIn]);
 
   // Extract unique categories from food items
   const getCategories = () => {
@@ -125,34 +142,20 @@ export const Dashboard = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const openFoodModal = (foodItem) => {
-    setSelectedFood(foodItem);
-    setShowModal(true);
-
-    // Info toast when viewing item details
-
-    toast.info(`Viewing details for ${foodItem.name}`, {
-      position: "bottom-right",
-      autoClose: 2000,
-      hideProgressBar: true,
-      closeOnClick: true,
-      pauseOnHover: false,
-      draggable: true,
-    });
+  // Navigate to food detail page
+  const handleFoodClick = (foodId) => {
+    navigate(`/food/${foodId}`);
   };
 
-  const closeModal = () => {
-    setShowModal(false);
-    setSelectedFood(null);
-  };
-
-  const handleAddToCart = async (foodItem) => {
+  const handleAddToCart = async (foodItem, event) => {
+    // Prevent navigation when clicking the button
+    event.stopPropagation();
+    
     const isLoggedIn = isUserLoggedIn();
 
     if (!isLoggedIn) {
       const updatedCart = addToLocalCart(foodItem);
       setCartItems(updatedCart);
-
       toast.success(`${foodItem.name} added to cart!`, {
         position: "top-right",
         autoClose: 2000,
@@ -161,44 +164,33 @@ export const Dashboard = () => {
       return;
     }
 
-    // If logged in, add to database
     try {
       const existingItem = cartItems.find(
         (cartItem) => cartItem._id === foodItem._id
       );
 
-      const cartData = foodItem._id;
-      const response = await addToCart(cartData);
-      console.log("Cart response:", response);
-
-      // ✅ Accept both success messages
-      if (
-        response &&
-        (response.msg === "Item added to cart successfully" ||
-          response.msg === "Item quantity updated in cart" ||
-          response.status === true ||
-          response.success === true ||
-          response.message?.toLowerCase().includes("added"))
-      ) {
-        if (existingItem) {
-          setCartItems(
-            cartItems.map((cartItem) =>
-              cartItem._id === foodItem._id
-                ? { ...cartItem, quantity: cartItem.quantity + 1 }
-                : cartItem
-            )
-          );
-        } else {
-          setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
-        }
-
-        toast.success(`${foodItem.name} added to cart!`, {
-          position: "top-right",
-          autoClose: 2000,
-          theme: "colored",
-        });
+      if (existingItem) {
+        await handleUpdateQuantity(foodItem._id, existingItem.quantity + 1);
       } else {
-        throw new Error(response?.msg || "Failed to add to cart");
+        const cartData = foodItem._id;
+        const response = await addToCart(cartData);
+        console.log("Add to Cart response:", response);
+
+        if (
+          response &&
+          (response.msg === "Item added to cart successfully" ||
+            response.status === true ||
+            response.success === true)
+        ) {
+          setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
+          toast.success(`${foodItem.name} added to cart!`, {
+            position: "top-right",
+            autoClose: 2000,
+            theme: "colored",
+          });
+        } else {
+          throw new Error(response?.msg || "Failed to add to cart");
+        }
       }
     } catch (error) {
       console.error("Failed to add item to cart:", error);
@@ -210,44 +202,10 @@ export const Dashboard = () => {
     }
   };
 
-  const removeFromCart = (itemId) => {
-    const existingItem = cartItems.find((cartItem) => cartItem._id === itemId);
-
-    if (existingItem && existingItem.quantity === 1) {
-      setCartItems(cartItems.filter((cartItem) => cartItem._id !== itemId));
-
-      // Toast for item removal
-      toast.warn(`${existingItem.name} removed from cart`, {
-        position: "top-right",
-        autoClose: 2000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } else {
-      setCartItems(
-        cartItems.map((cartItem) =>
-          cartItem._id === itemId
-            ? { ...cartItem, quantity: cartItem.quantity - 1 }
-            : cartItem
-        )
-      );
-
-      // Toast for quantity decrease
-      toast.info(`Decreased ${existingItem.name} quantity`, {
-        position: "top-right",
-        autoClose: 1500,
-        hideProgressBar: true,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: true,
-      });
-    }
-  };
-
-  const toggleFavorite = async (foodId) => {
-    // ✅ Check if user is logged in first
+  const toggleFavorite = async (foodId, event) => {
+    // Prevent navigation when clicking the heart button
+    event.stopPropagation();
+    
     const isLoggedIn = isUserLoggedIn();
 
     if (!isLoggedIn) {
@@ -261,7 +219,6 @@ export const Dashboard = () => {
     const foodItem = foodItems.find((item) => item._id === foodId);
     const isCurrentlyLiked = likedItems.includes(foodId);
 
-    // Optimistically update UI
     if (isCurrentlyLiked) {
       setLikedItems((prev) => prev.filter((id) => id !== foodId));
     } else {
@@ -284,13 +241,71 @@ export const Dashboard = () => {
     } catch (error) {
       console.error("Failed to update favorite status:", error);
       toast.error("Could not update favorites. Please try again.");
-
-      // Revert if API fails
       if (isCurrentlyLiked) {
         setLikedItems((prev) => [...prev, foodId]);
       } else {
         setLikedItems((prev) => prev.filter((id) => id !== foodId));
       }
+    }
+  };
+
+  const handleUpdateQuantity = async (foodId, newQuantity) => {
+    const isLoggedIn = isUserLoggedIn();
+    const cartItem = getCartItem(foodId);
+
+    if (!isLoggedIn) {
+      return;
+    }
+
+    if (!cartItem || !cartItem.cartId) {
+      console.error("Cannot update quantity, cartId is missing.", cartItem);
+      return;
+    }
+    const cartId = cartItem.cartId;
+
+    const originalCart = [...cartItems]; 
+    try {
+      if (newQuantity <= 0) {
+        setCartItems((prev) => prev.filter((item) => item._id !== foodId));
+      } else {
+        setCartItems((prev) =>
+          prev.map((item) =>
+            item._id === foodId ? { ...item, quantity: newQuantity } : item
+          )
+        );
+      }
+      
+      const response = await updateCartItem(cartId, { quantity: newQuantity });
+      console.log("Update cart response:", response);
+
+      if (response && (response.success || response.msg?.includes("updated"))) {
+        // Success
+      } else {
+        throw new Error(response.msg || "Failed to update quantity");
+      }
+    } catch (error) {
+      console.error("Failed to update cart item:", error);
+      toast.error("Failed to update quantity. Please try again!", {
+        position: "top-right",
+        autoClose: 3000,
+      });
+      setCartItems(originalCart);
+    }
+  };
+
+  const increaseQuantity = (foodId, event) => {
+    event.stopPropagation();
+    const cartItem = getCartItem(foodId);
+    if (cartItem) {
+      handleUpdateQuantity(foodId, cartItem.quantity + 1);
+    }
+  };
+
+  const decreaseQuantity = (foodId, event) => {
+    event.stopPropagation();
+    const cartItem = getCartItem(foodId);
+    if (cartItem) {
+      handleUpdateQuantity(foodId, cartItem.quantity - 1);
     }
   };
 
@@ -306,27 +321,20 @@ export const Dashboard = () => {
     0
   );
 
-  // Category change toast
   const handleCategoryChange = (category) => {
     setSelectedCategory(category);
-
     if (category !== "All") {
       toast.dismiss();
       toast.info(`Showing ${category} items`, {
         position: "top-center",
         autoClose: 1500,
         hideProgressBar: true,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: true,
       });
     }
   };
 
-  // Cart view toggle
   const handleCartToggle = () => {
     setShowCart(!showCart);
-
     if (!showCart && cartItemCount > 0) {
       toast.info(
         `Your cart has ${cartItemCount} item${cartItemCount > 1 ? "s" : ""}`,
@@ -334,9 +342,6 @@ export const Dashboard = () => {
           position: "top-left",
           autoClose: 2000,
           hideProgressBar: true,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
         }
       );
     }
@@ -356,7 +361,6 @@ export const Dashboard = () => {
   return (
     <>
       <Navigation />
-      {/* Enhanced ToastContainer with custom styling */}
       <ToastContainer
         position="top-right"
         autoClose={3000}
@@ -378,9 +382,8 @@ export const Dashboard = () => {
       />
 
       <div className="min-h-screen bg-gray-50">
-        {/* Enhanced Hero Section */}
+        {/* Hero Section */}
         <div className="relative bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
-          {/* Animated background elements */}
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute -top-4 -left-4 w-72 h-72 bg-red-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
             <div className="absolute -bottom-8 -right-4 w-72 h-72 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse delay-1000"></div>
@@ -389,7 +392,6 @@ export const Dashboard = () => {
 
           <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 lg:gap-12 items-center">
-              {/* Left side content */}
               <div className="text-center lg:text-left">
                 <div className="inline-flex items-center bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs sm:text-sm font-semibold mb-2 sm:mb-4">
                   <span className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>
@@ -422,7 +424,6 @@ export const Dashboard = () => {
                   delivered fresh to your doorstep in minutes.
                 </p>
 
-                {/* CTA Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center lg:justify-start mb-4 sm:mb-6">
                   <button
                     className="bg-red-500 hover:bg-red-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
@@ -440,13 +441,13 @@ export const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Right side image */}
               <div className="relative">
                 <div className="relative z-10">
                   <div className="flex items-center justify-center text-center text-white min-h-[35vh] sm:min-h-[50vh] md:min-h-[73vh]">
                     <img
                       src="/burgers.png"
                       className="w-full h-full object-contain sm:object-cover"
+                      alt="Delicious burgers"
                     />
                   </div>
                 </div>
@@ -512,7 +513,8 @@ export const Dashboard = () => {
               filteredFoodItems.map((foodItem) => (
                 <div
                   key={foodItem._id}
-                  className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-all duration-300 border border-gray-200 hover:border-red-200"
+                  className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-all duration-300 border border-gray-200 hover:border-red-200 cursor-pointer"
+                  onClick={() => handleFoodClick(foodItem._id)}
                 >
                   <div className="relative">
                     <img
@@ -521,8 +523,7 @@ export const Dashboard = () => {
                         "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=180&fit=crop"
                       }
                       alt={foodItem.name}
-                      className="w-full h-36 object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                      onClick={() => openFoodModal(foodItem)}
+                      className="w-full h-36 object-cover hover:opacity-95 transition-opacity"
                     />
                     <div className="absolute top-2 right-2 flex items-center space-x-1">
                       {foodItem.discount && (
@@ -532,7 +533,7 @@ export const Dashboard = () => {
                       )}
                       {isLoggedIn && (
                         <button
-                          onClick={() => toggleFavorite(foodItem._id)}
+                          onClick={(e) => toggleFavorite(foodItem._id, e)}
                           className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all duration-200 shadow-sm hover:shadow-md"
                         >
                           <Heart
@@ -586,13 +587,39 @@ export const Dashboard = () => {
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleAddToCart(foodItem)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-md font-medium transition-colors flex items-center space-x-1 text-sm"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add</span>
-                      </button>
+
+                      {(() => {
+                        const cartItem = getCartItem(foodItem._id);
+                        const isInCart = !!cartItem;
+
+                        return !isInCart ? (
+                          <button
+                            onClick={(e) => handleAddToCart(foodItem, e)}
+                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-md font-medium transition-colors flex items-center space-x-1 text-sm"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add</span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center space-x-2 bg-red-500 rounded-md px-2 py-1">
+                            <button
+                              onClick={(e) => decreaseQuantity(foodItem._id, e)}
+                              className="text-white hover:bg-red-600 rounded p-1 transition-colors"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-white font-semibold text-sm min-w-[20px] text-center">
+                              {cartItem.quantity}
+                            </span>
+                            <button
+                              onClick={(e) => increaseQuantity(foodItem._id, e)}
+                              className="text-white hover:bg-red-600 rounded p-1 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -601,7 +628,7 @@ export const Dashboard = () => {
           </div>
 
           {/* Show More Button */}
-          {foodItems.length && (
+          {foodItems.length > 0 && (
             <div className="flex justify-center mt-14 mb-6">
               <button
                 className="flex items-center text-sm font-medium bg-red-500 text-white px-3 py-1.5 rounded-md hover:bg-red-600 transition-colors shadow-md hover:shadow-lg"
@@ -619,192 +646,6 @@ export const Dashboard = () => {
             </div>
           )}
         </div>
-
-        {/* Food Item Modal */}
-        {showModal && selectedFood && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl max-w-md w-full shadow-2xl">
-              {/* Modal Header */}
-              <div className="flex justify-between items-center p-6 border-b">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {selectedFood.name}
-                </h2>
-                <button
-                  onClick={closeModal}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div className="p-6">
-                <div className="mb-4">
-                  <img
-                    src={
-                      selectedFood.image ||
-                      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"
-                    }
-                    alt={selectedFood.name}
-                    className="w-full h-48 object-cover rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-2xl font-bold text-green-600">
-                      ₹{selectedFood.price}
-                    </span>
-                    {selectedFood.category && (
-                      <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm">
-                        {selectedFood.category}
-                      </span>
-                    )}
-                  </div>
-
-                  {selectedFood.restaurantId?.restaurantsName && (
-                    <p className="text-gray-600">
-                      <strong>Restaurant:</strong>{" "}
-                      {selectedFood.restaurantId.restaurantsName}
-                    </p>
-                  )}
-
-                  {selectedFood.description && (
-                    <p className="text-gray-700">{selectedFood.description}</p>
-                  )}
-
-                  {selectedFood.preparationTime && (
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <Clock className="w-4 h-4" />
-                      <span>
-                        Ready in {selectedFood.preparationTime} minutes
-                      </span>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      handleAddToCart(selectedFood);
-                      closeModal();
-                    }}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Plus className="w-5 h-5" />
-                    <span>Add to Cart</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Cart Sidebar */}
-        {/* {showCart && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50">
-            <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
-              <div className="flex items-center justify-between p-4 border-b">
-                <h2 className="text-lg font-semibold">Your Order</h2>
-                <button
-                  onClick={() => setShowCart(false)}
-                  className="p-2 hover:bg-gray-100 rounded-md"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4">
-                {cartItems.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500">Your cart is empty</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {cartItems.map((item) => (
-                      <div
-                        key={item._id}
-                        className="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg"
-                      >
-                        <img
-                          src={
-                            item.image ||
-                            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=60&h=60&fit=crop"
-                          }
-                          alt={item.name}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                        <div className="flex-1">
-                          <h4 className="font-medium">{item.name}</h4>
-                          <p className="text-green-600 font-semibold">
-                            ₹{item.price}
-                          </p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => removeFromCart(item._id)}
-                            className="p-1 hover:bg-gray-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => handleAddToCart(item)}
-                            className="p-1 hover:bg-gray-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {cartItems.length > 0 && (
-                <div className="border-t p-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-semibold">Total</span>
-                    <span className="text-lg font-bold text-green-600">
-                      ₹{getTotalPrice()}
-                    </span>
-                  </div>
-                  <button
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-semibold transition-colors"
-                    onClick={() => {
-                      navigate("/cart");
-                      toast.success(
-                        `Proceeding to checkout with ${cartItemCount} items! 🛒`,
-                        {
-                          position: "top-center",
-                          autoClose: 2000,
-                        }
-                      );
-                    }}
-                  >
-                    Proceed to Checkout
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )} */}
-
-        {/* Floating Cart Button */}
-        {/* {cartItemCount > 0 && (
-          <button
-            onClick={handleCartToggle}
-            className="fixed bottom-6 right-6 bg-red-500 hover:bg-red-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-40"
-          >
-            <div className="relative">
-              <ShoppingCart className="w-6 h-6" />
-              <span className="absolute -top-2 -right-2 bg-yellow-400 text-red-900 text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center">
-                {cartItemCount}
-              </span>
-            </div>
-          </button>
-        )} */}
       </div>
       <Footer />
     </>

@@ -3,7 +3,7 @@ import axios from "axios";
 export const baseURL =
   import.meta.env.VITE_API_URL || "https://ecommerceapi-judn.onrender.com";
 
-  //"http://localhost:5000"
+ // "http://localhost:5000"
 
 const createAxiosInstance = (baseURL, defaultHeaders = {}) => {
   return axios.create({
@@ -63,6 +63,8 @@ setupInterceptors(ORDER_INSTANCE);
 export const LIKE_INSTANCE = createAxiosInstance(`${baseURL}/likes/`)
 setupInterceptors(LIKE_INSTANCE)
 
+export const PRODUCT_INSTANCE = createAxiosInstance(`${baseURL}/products/`)
+setupInterceptors(PRODUCT_INSTANCE)
 
 
 

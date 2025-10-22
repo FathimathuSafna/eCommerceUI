@@ -16,6 +16,7 @@ import {
   isUserLoggedIn,
 } from "../utils/cartUtils";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 const FoodCart = () => {
   const [cartItems, setCartItems] = useState([]);
@@ -27,27 +28,28 @@ const FoodCart = () => {
   const [userProfile, setUserProfile] = useState(null);
   const [orderAmount, setOrderAmount] = useState(0);
   const isLoggedIn = isUserLoggedIn();
+  const navigate = useNavigate();
 
- const fetchCartData = async () => {
-  try {
-    setLoading(true);
+  const fetchCartData = async () => {
+    try {
+      setLoading(true);
 
-    if (!isLoggedIn) {
-      const localCart = getLocalCart();
-      setCartItems(localCart);
-    } else {
-      const response = await getCartItems();
-      setCartItems(
-        response?.data && Array.isArray(response.data) ? response.data : []
-      );
+      if (!isLoggedIn) {
+        const localCart = getLocalCart();
+        setCartItems(localCart);
+      } else {
+        const response = await getCartItems();
+        setCartItems(
+          response?.data && Array.isArray(response.data) ? response.data : []
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch cart items:", error);
+      setCartItems([]);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Failed to fetch cart items:", error);
-    setCartItems([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const fetchUserProfile = async () => {
     if (!isLoggedIn) return;
@@ -153,7 +155,8 @@ const FoodCart = () => {
 
             if (verificationData.success) {
               toast.success(" Order placed successfully!");
-              fetchCartData(); 
+              fetchCartData();
+              navigate("/orders");
             } else {
               toast.error(
                 verificationData.msg || "Payment verification failed"

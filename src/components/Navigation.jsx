@@ -57,7 +57,6 @@ export const Navigation = () => {
 
   return (
     <>
-     
       <nav className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -79,7 +78,10 @@ export const Navigation = () => {
 
               <button
                 onClick={() =>
-                  handleProtectedNavigation("/orders", "Please login to view orders")
+                  handleProtectedNavigation(
+                    "/orders",
+                    "Please login to view orders"
+                  )
                 }
                 className="p-2 text-gray-600 hover:text-gray-900"
               >
@@ -88,7 +90,10 @@ export const Navigation = () => {
 
               <button
                 onClick={() =>
-                  handleProtectedNavigation("/wishList", "Please login to view wishlist")
+                  handleProtectedNavigation(
+                    "/wishList",
+                    "Please login to view wishlist"
+                  )
                 }
                 className="p-2 text-gray-600 hover:text-red-600"
               >
@@ -97,7 +102,10 @@ export const Navigation = () => {
 
               <button
                 onClick={() =>
-                  handleProtectedNavigation("/cart", "Please login to access your cart")
+                  handleProtectedNavigation(
+                    "/cart",
+                    "Please login to access your cart"
+                  )
                 }
                 className="relative p-2 text-gray-600 hover:text-red-600"
               >
@@ -127,9 +135,38 @@ export const Navigation = () => {
             </div>
 
             {/* Mobile Menu Button */}
-            <button className="md:hidden p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+            <div className="flex items-center justify-between md:hidden gap-3">
+              {/* Cart Button */}
+              <button
+                onClick={() => {
+                  handleProtectedNavigation(
+                    "/cart",
+                    "Please login to access your cart"
+                  );
+                  setIsMenuOpen(false);
+                }}
+                className="relative flex items-center gap-2 text-gray-700 hover:text-red-600"
+              >
+                <ShoppingCart className="w-5 h-5" /> Cart
+                {cartItems.length > 0 && (
+                  <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {cartItems.reduce((t, item) => t + item.quantity, 0)}
+                  </span>
+                )}
+              </button>
+
+              {/* Menu Toggle Button */}
+              <button
+                className="p-2 text-gray-700 hover:text-red-600"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                {isMenuOpen ? (
+                  <X className="w-6 h-6" />
+                ) : (
+                  <Menu className="w-6 h-6" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -149,7 +186,10 @@ export const Navigation = () => {
 
               <button
                 onClick={() => {
-                  handleProtectedNavigation("/orders", "Please login to view orders");
+                  handleProtectedNavigation(
+                    "/orders",
+                    "Please login to view orders"
+                  );
                   setIsMenuOpen(false);
                 }}
                 className="flex items-center gap-2 text-gray-700 hover:text-red-600"
@@ -159,27 +199,15 @@ export const Navigation = () => {
 
               <button
                 onClick={() => {
-                  handleProtectedNavigation("/wishList", "Please login to view wishlist");
+                  handleProtectedNavigation(
+                    "/wishList",
+                    "Please login to view wishlist"
+                  );
                   setIsMenuOpen(false);
                 }}
                 className="flex items-center gap-2 text-gray-700 hover:text-red-600"
               >
                 <FavoriteBorderIcon className="w-5 h-5" /> Wishlist
-              </button>
-
-              <button
-                onClick={() => {
-                  handleProtectedNavigation("/cart", "Please login to access your cart");
-                  setIsMenuOpen(false);
-                }}
-                className="flex items-center gap-2 text-gray-700 hover:text-red-600 relative"
-              >
-                <ShoppingCart className="w-5 h-5" /> Cart
-                {cartItems.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {cartItems.reduce((t, item) => t + item.quantity, 0)}
-                  </span>
-                )}
               </button>
 
               {!isLoggedIn ? (

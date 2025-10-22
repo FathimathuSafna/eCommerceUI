@@ -11,30 +11,43 @@ import {
   Award,
   Eye,
   ShoppingCart,
-  X,
+  X, // No longer needed
   Leaf,
   Flame,
   UtensilsCrossed,
   Share2,
+  Minus,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { AuthModal } from "../components/authModal";
-import { addToCart } from "../services/cartAPI";
+import {
+  addToCart,
+  getCartItems,
+  updateCartItem,
+} from "../services/cartAPI";
 import { getAllFoodItems } from "../services/adminAPI";
 import { Navigation } from "../components/Navigation";
 import { useNavigate } from "react-router-dom";
-import { addToLocalCart, isUserLoggedIn } from "../utils/cartUtils"; // ✅ Add import
+import { addToLocalCart, isUserLoggedIn } from "../utils/cartUtils";
 
 export const FoodDisplayUI = () => {
   const [foodItems, setFoodItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   const [favorites, setFavorites] = useState([]);
-  const [cartItems, setCartItems] = useState([]); // ✅ Use consistent name
-  const [selectedFood, setSelectedFood] = useState(null);
-  const [showFoodDetail, setShowFoodDetail] = useState(false);
+  const [cartItems, setCartItems] = useState([]);
+  // --- REMOVED MODAL STATE ---
+  // const [selectedFood, setSelectedFood] = useState(null);
+  // const [showFoodDetail, setShowFoodDetail] = useState(false);
+  // --- END REMOVED MODAL STATE ---
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [loadingCart, setLoadingCart] = useState(true);
   const navigate = useNavigate();
+  const isLoggedIn = isUserLoggedIn();
+
+  const getCartItem = (foodId) => {
+    return cartItems.find((item) => item._id === foodId);
+  };
 
   useEffect(() => {
     const fetchFoodData = async () => {
@@ -50,6 +63,35 @@ export const FoodDisplayUI = () => {
     fetchFoodData();
   }, []);
 
+  useEffect(() => {
+    const loadCartData = async () => {
+      if (isLoggedIn) {
+        try {
+          setLoadingCart(true);
+          const response = await getCartItems();
+          if (response && response.success && Array.isArray(response.data)) {
+            const transformedCart = response.data.map((cartItem) => ({
+              ...cartItem.foodId,
+              quantity: cartItem.quantity,
+              cartId: cartItem._id,
+            }));
+            setCartItems(transformedCart);
+          } else {
+            setCartItems([]);
+          }
+        } catch (err) {
+          console.error("Failed to load cart items", err);
+          setCartItems([]);
+        } finally {
+          setLoadingCart(false);
+        }
+      } else {
+        setLoadingCart(false);
+      }
+    };
+    loadCartData();
+  }, [isLoggedIn]);
+
   const filteredFoods = foodItems.filter(
     (food) =>
       (food.name &&
@@ -58,23 +100,78 @@ export const FoodDisplayUI = () => {
         food.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleAddToCart = async (foodItem) => {
-    const isLoggedIn = isUserLoggedIn();
+  const handleUpdateQuantity = async (foodId, newQuantity) => {
+    if (!isLoggedIn) {
+      toast.info("Please log in to update your cart");
+      return;
+    }
 
+    const cartItem = getCartItem(foodId);
+    if (!cartItem || !cartItem.cartId) {
+      console.error("Cannot update quantity, cartId is missing.", cartItem);
+      return;
+    }
+    const cartId = cartItem.cartId;
+
+    const originalCart = [...cartItems];
+    try {
+      if (newQuantity <= 0) {
+        setCartItems((prev) => prev.filter((item) => item._id !== foodId));
+      } else {
+        setCartItems((prev) =>
+          prev.map((item) =>
+            item._id === foodId ? { ...item, quantity: newQuantity } : item
+          )
+        );
+      }
+
+      const response = await updateCartItem(cartId, { quantity: newQuantity });
+
+      if (
+        !response ||
+        (!response.success &&
+          !response.msg?.includes("updated") &&
+          !response.msg?.includes("removed"))
+      ) {
+        throw new Error(response.msg || "Failed to update quantity");
+      }
+    } catch (error) {
+      console.error("Failed to update cart item:", error);
+      toast.error("Failed to update quantity.");
+      setCartItems(originalCart);
+    }
+  };
+
+  const increaseQuantity = (foodId) => {
+    const cartItem = getCartItem(foodId);
+    if (cartItem) {
+      handleUpdateQuantity(foodId, cartItem.quantity + 1);
+    }
+  };
+
+  const decreaseQuantity = (foodId) => {
+    const cartItem = getCartItem(foodId);
+    if (cartItem) {
+      handleUpdateQuantity(foodId, cartItem.quantity - 1);
+    }
+  };
+
+  const handleAddToCart = async (foodItem) => {
     if (!isLoggedIn) {
       const updatedCart = addToLocalCart(foodItem);
       setCartItems(updatedCart);
-
       toast.success(`${foodItem.name} added to cart!`);
       return;
     }
 
-    // If logged in, add to database
-    try {
-      const existingItem = cartItems.find(
-        (cartItem) => cartItem._id === foodItem._id
-      );
+    const existingItem = getCartItem(foodItem._id);
 
+    if (existingItem) {
+      await handleUpdateQuantity(foodItem._id, existingItem.quantity + 1);
+      return;
+    }
+
+    try {
       const cartData = foodItem._id;
       const response = await addToCart(cartData);
 
@@ -83,20 +180,12 @@ export const FoodDisplayUI = () => {
         (response.msg === "Item added to cart successfully" ||
           response.msg === "Item quantity updated in cart" ||
           response.status === true ||
-          response.success === true ||
-          response.message?.toLowerCase().includes("added"))
+          response.success === true)
       ) {
-        if (existingItem) {
-          setCartItems(
-            cartItems.map((cartItem) =>
-              cartItem._id === foodItem._id
-                ? { ...cartItem, quantity: cartItem.quantity + 1 }
-                : cartItem
-            )
-          );
-        } else {
-          setCartItems([...cartItems, { ...foodItem, quantity: 1 }]);
-        }
+        setCartItems([
+          ...cartItems,
+          { ...foodItem, quantity: 1, cartId: response.data?._id },
+        ]);
 
         toast.success(`${foodItem.name} added to cart!`);
       } else {
@@ -113,10 +202,6 @@ export const FoodDisplayUI = () => {
     toast.success("Login successful!");
   };
 
-  const isInCart = (foodId) => {
-    return cartItems.some((item) => item._id === foodId); // ✅ Use cartItems
-  };
-
   const toggleFavorite = (foodId) => {
     if (favorites.includes(foodId)) {
       setFavorites(favorites.filter((id) => id !== foodId));
@@ -125,10 +210,9 @@ export const FoodDisplayUI = () => {
     }
   };
 
-  const openFoodDetail = (food) => {
-    setSelectedFood(food);
-    setShowFoodDetail(true);
-  };
+  // --- REMOVED openFoodDetail FUNCTION ---
+  // const openFoodDetail = (food) => { ... };
+  // --- END REMOVED FUNCTION ---
 
   return (
     <>
@@ -180,132 +264,176 @@ export const FoodDisplayUI = () => {
             </div>
           </div>
 
-          {/* Rest of your JSX remains the same */}
           {filteredFoods.length > 0 ? (
             viewMode === "grid" ? (
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredFoods.map((food) => (
-                  <div
-                    key={food._id}
-                    className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-300 hover:shadow-lg"
-                  >
-                    <div className="relative">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {filteredFoods.map((food) => {
+                  const cartItem = getCartItem(food._id);
+
+                  return (
+                    <div
+                      key={food._id}
+                      className="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md"
+                    >
+                      <div className="relative">
+                        <img
+                          src={
+                            food.image || "https://placehold.co/400x300?text=Food"
+                          }
+                          alt={food.name}
+                          className="h-32 sm:h-36 w-full object-cover cursor-pointer"
+                          // --- UPDATED CLICK HANDLER ---
+                          onClick={() => navigate(`/food/${food._id}`)}
+                          // --- END UPDATED HANDLER ---
+                        />
+                      </div>
+                      <div className="flex flex-grow flex-col justify-between p-2 sm:p-3">
+                        <div>
+                          <span className="text-xs font-semibold text-red-600 line-clamp-1">
+                            {food.restaurantId?.restaurantsName || "Restaurant"}
+                          </span>
+                          <h3
+                            className="line-clamp-1 font-semibold text-sm sm:text-base text-gray-900 cursor-pointer"
+                            // --- UPDATED CLICK HANDLER ---
+                            onClick={() => navigate(`/food/${food._id}`)}
+                            // --- END UPDATED HANDLER ---
+                          >
+                            {food.name}
+                          </h3>
+                          <div className="my-2 flex items-center justify-between">
+                            <span className="text-base sm:text-lg font-bold text-gray-800">
+                              ₹{food.price}
+                            </span>
+                            <span
+                              className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+                                food.isAvailable
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {food.isAvailable ? "Available" : "Out"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Button logic remains the same */}
+                        <div className="mt-2">
+                          {cartItem ? (
+                            <div className="flex items-center justify-center space-x-2 rounded-md bg-red-500 py-1.5 font-medium">
+                              <button
+                                onClick={() => decreaseQuantity(food._id)}
+                                className="text-white transition-opacity hover:opacity-75"
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <span className="font-bold text-sm text-white min-w-[20px] text-center">
+                                {cartItem.quantity}
+                              </span>
+                              <button
+                                onClick={() => increaseQuantity(food._id)}
+                                className="text-white transition-opacity hover:opacity-75"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleAddToCart(food)}
+                              disabled={!food.isAvailable}
+                              className="flex w-full items-center justify-center space-x-1 rounded-md bg-red-500 py-1.5 text-xs sm:text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-400"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Add</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredFoods.map((food) => {
+                  const cartItem = getCartItem(food._id);
+
+                  return (
+                    <div
+                      key={food._id}
+                      className="flex items-center space-x-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all duration-300 hover:shadow-md"
+                    >
                       <img
                         src={
-                          food.image || "https://placehold.co/600x400?text=Food"
+                          food.image || "https://placehold.co/96x96?text=Food"
                         }
                         alt={food.name}
-                        className="h-48 w-full object-cover"
+                        className="h-20 w-20 flex-shrink-0 rounded-lg object-cover cursor-pointer"
+                        // --- UPDATED CLICK HANDLER ---
+                        onClick={() => navigate(`/food/${food._id}`)}
+                        // --- END UPDATED HANDLER ---
                       />
-                    </div>
-                    <div className="flex flex-grow flex-col justify-between p-4">
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <span className="text-xs font-semibold text-red-600">
                           {food.restaurantId?.restaurantsName || "Restaurant"}
                         </span>
-                        <h3 className="line-clamp-1 font-bold text-lg text-gray-900">
+                        <h3
+                          className="font-semibold text-base text-gray-900 cursor-pointer truncate"
+                          // --- UPDATED CLICK HANDLER ---
+                          onClick={() => navigate(`/food/${food._id}`)}
+                          // --- END UPDATED HANDLER ---
+                        >
                           {food.name}
                         </h3>
-                        <p className="mt-1 text-sm text-gray-500">
-                          Category: {food.category}
-                        </p>
-                        <div className="my-3 flex items-center justify-between">
-                          <span className="text-xl font-bold text-gray-800">
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-lg font-bold text-gray-800">
                             ₹{food.price}
                           </span>
                           <span
-                            className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                              food.isAvailable
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {food.isAvailable ? "Available" : "Unavailable"}
-                          </span>
-                        </div>
-                      </div>
-                      {isInCart(food._id) ? (
-                        <button
-                          disabled
-                          className="mt-2 w-full cursor-not-allowed rounded-lg bg-gray-200 py-2 font-medium text-gray-500"
-                        >
-                          Added
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleAddToCart(food)}
-                          disabled={!food.isAvailable}
-                          className="mt-2 flex w-full items-center justify-center space-x-2 rounded-lg bg-red-500 py-2 font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-400"
-                        >
-                          <Plus className="h-5 w-5" />
-                          <span>Add to Cart</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // List view code remains the same...
-              <div className="space-y-4">
-                {filteredFoods.map((food) => (
-                  <div
-                    key={food._id}
-                    className="flex items-center space-x-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-300 hover:shadow-lg"
-                  >
-                    <img
-                      src={
-                        food.image || "https://placehold.co/128x128?text=Food"
-                      }
-                      alt={food.name}
-                      className="h-24 w-24 flex-shrink-0 rounded-xl object-cover md:h-32 md:w-32"
-                    />
-                    <div className="flex-1">
-                      <span className="text-xs font-semibold text-red-600">
-                        {food.restaurantId?.restaurantsName || "Restaurant"}
-                      </span>
-                      <h3 className="font-bold text-xl text-gray-900">
-                        {food.name}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Category: {food.category}
-                      </p>
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="flex flex-col">
-                          <span className="text-xl font-bold text-gray-800">
-                            ₹{food.price}
-                          </span>
-                          <span
-                            className={`mt-1 text-sm font-semibold ${
+                            className={`text-xs font-semibold ${
                               food.isAvailable
                                 ? "text-green-600"
                                 : "text-red-600"
                             }`}
                           >
-                            {food.isAvailable ? "Available" : "Unavailable"}
+                            {food.isAvailable ? "Available" : "Out of stock"}
                           </span>
                         </div>
-                        {isInCart(food._id) ? (
-                          <button
-                            disabled
-                            className="cursor-not-allowed rounded-lg bg-gray-200 px-6 py-2 font-medium text-gray-500"
-                          >
-                            Added
-                          </button>
+                      </div>
+
+                      {/* Button logic remains the same */}
+                      <div className="flex-shrink-0">
+                        {cartItem ? (
+                          <div className="flex items-center justify-center space-x-2 rounded-md bg-red-500 px-3 py-1.5 font-medium">
+                            <button
+                              onClick={() => decreaseQuantity(food._id)}
+                              className="text-white transition-opacity hover:opacity-75"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            <span className="font-bold text-sm text-white min-w-[20px] text-center">
+                              {cartItem.quantity}
+                            </span>
+                            <button
+                              onClick={() => increaseQuantity(food._id)}
+                              className="text-white transition-opacity hover:opacity-75"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => handleAddToCart(food)}
                             disabled={!food.isAvailable}
-                            className="flex items-center space-x-2 rounded-lg bg-red-500 px-6 py-2 font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-400"
+                            className="flex items-center space-x-1 rounded-md bg-red-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-400"
                           >
-                            <Plus className="h-5 w-5" />
+                            <Plus className="h-4 w-4" />
                             <span>Add</span>
                           </button>
                         )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : (
@@ -321,65 +449,6 @@ export const FoodDisplayUI = () => {
           )}
         </main>
       </div>
-
-      {/* Detail modal remains the same */}
-      {showFoodDetail && selectedFood && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
-              <h2 className="text-xl font-bold text-gray-900">Item Details</h2>
-              <button
-                onClick={() => setShowFoodDetail(false)}
-                className="rounded-full p-2 hover:bg-gray-100"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div>
-              <img
-                src={selectedFood.image}
-                alt={selectedFood.name}
-                className="h-64 w-full object-cover"
-              />
-            </div>
-            <div className="p-6">
-              <span className="text-sm font-semibold text-red-600">
-                {selectedFood.restaurantId?.restaurantsName}
-              </span>
-              <h1 className="mt-1 text-3xl font-bold text-gray-900">
-                {selectedFood.name}
-              </h1>
-              <p className="my-4 text-gray-600">
-                {selectedFood.description ||
-                  "No additional description available for this item."}
-              </p>
-              <div className="flex items-center justify-between rounded-lg bg-gray-50 p-4">
-                <span className="text-2xl font-bold text-gray-900">
-                  ₹{selectedFood.price}
-                </span>
-                {isInCart(selectedFood._id) ? (
-                  <button
-                    disabled
-                    className="cursor-not-allowed rounded-lg bg-gray-300 px-6 py-3 text-base font-semibold text-gray-600"
-                  >
-                    Added to Cart
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleAddToCart(selectedFood)}
-                    disabled={!selectedFood.isAvailable}
-                    className="flex items-center space-x-2 rounded-lg bg-red-500 px-6 py-3 text-base font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-400"
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span>Add to Cart</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <AuthModal
         open={isAuthModalOpen}
         handleClose={() => setIsAuthModalOpen(false)}
