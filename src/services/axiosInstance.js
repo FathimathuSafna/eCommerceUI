@@ -67,5 +67,8 @@ setupInterceptors(LIKE_INSTANCE)
 export const PRODUCT_INSTANCE = createAxiosInstance(`${baseURL}/products/`)
 setupInterceptors(PRODUCT_INSTANCE)
 
+export const SHIPPING_INSTANCE = createAxiosInstance(`${baseURL}/shipping/`)
+setupInterceptors(SHIPPING_INSTANCE)
+
 
 
